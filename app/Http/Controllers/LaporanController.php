@@ -6,9 +6,68 @@ use App\Models\Pelanggan;
 use App\Models\Pembayaran;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class LaporanController extends Controller
 {
+    public function cetakPdf(Request $request)
+    {
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+
+        $start = null;
+        $end = null;
+
+        if (is_string($startDate) && $startDate !== '') {
+            try {
+                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
+            } catch (\Throwable $e) {
+                $start = null;
+            }
+        }
+
+        if (is_string($endDate) && $endDate !== '') {
+            try {
+                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
+            } catch (\Throwable $e) {
+                $end = null;
+            }
+        }
+
+        if ($start && $end && $start->gt($end)) {
+            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+        }
+
+        $riwayatPembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
+            ->whereIn('status_notifikasi', ['Send', 'Terkirim', 'Sukses'])
+            ->when($start, function ($query) use ($start) {
+                $query->whereDate('tanggal_bayar', '>=', $start->toDateString());
+            })
+            ->when($end, function ($query) use ($end) {
+                $query->whereDate('tanggal_bayar', '<=', $end->toDateString());
+            })
+            ->latest('tanggal_bayar')
+            ->latest('id_pembayaran')
+            ->get();
+
+        $totalPemasukan = $riwayatPembayaran->sum('nominal');
+
+        $periodLabel = ($startDate || $endDate)
+            ? trim(($startDate ?: 'awal') . ' s/d ' . ($endDate ?: 'akhir'))
+            : 'Semua Periode';
+
+        $pdf = Pdf::loadView('laporan.pdf', [
+            'riwayatPembayaran' => $riwayatPembayaran,
+            'totalPemasukan' => $totalPemasukan,
+            'periodLabel' => $periodLabel,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+            'printedAt' => now(),
+        ])->setPaper('a4', 'portrait');
+
+        return $pdf->download('Laporan_Keuangan_SMKN53.pdf');
+    }
+
     public function index(Request $request)
     {
         $startDate = $request->query('start_date');

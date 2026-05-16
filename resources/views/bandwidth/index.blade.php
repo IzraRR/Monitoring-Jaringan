@@ -46,7 +46,7 @@
                         <tr>
                             <td>{{ $item->id_paket }}</td>
                             <td>{{ $item->nama_paket }}</td>
-                            <td>{{ strtoupper(config('services.mikrotik.sync_mode', 'hotspot')) === 'PPPOE' ? 'PPPoE' : 'Hotspot' }}</td>
+                            <td>{{ Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot' }}</td>
                             <td>{{ $item->limit_download }}</td>
                             <td>{{ $item->limit_upload }}</td>
                             <td>

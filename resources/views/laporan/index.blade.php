@@ -4,6 +4,15 @@
 @section('page_heading', 'Laporan Keuangan & Pemasukan')
 
 @section('content')
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="text-muted small">
+        Laporan keuangan periode berjalan.
+    </div>
+    <a href="{{ route('laporan.cetak', request()->only('start_date', 'end_date')) }}" class="btn fw-bold" style="background-color: #1e293b; color: #fff;">
+        Cetak Laporan PDF
+    </a>
+</div>
+
 <div class="card border-0 shadow-sm mb-3" style="background-color: #dbe4ee;">
     <div class="card-body">
         <form action="{{ route('laporan.index') }}" method="GET" class="d-flex flex-wrap align-items-end gap-3">

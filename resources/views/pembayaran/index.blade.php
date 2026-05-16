@@ -128,10 +128,6 @@
 
 <h1 class="payment-title">Pencatatan Pembayaran & Tagihan</h1>
 
-<div class="mb-3">
-    <a href="{{ route('pembayaran.create') }}" class="btn btn-dark fw-bold">+ TAMBAH PEMBAYARAN</a>
-</div>
-
 <div class="row g-3 mb-3">
     <div class="col-lg-8">
         <div class="card payment-card h-100">
@@ -144,16 +140,18 @@
                     <button class="btn search-btn" type="submit"><i class="bi bi-search"></i></button>
                 </form>
 
-                <div class="muted-line mb-2">Total transaksi: {{ number_format($rekap['total_transaksi']) }}</div>
+                <div class="muted-line mb-2">
+                    <span id="client-info">Pilih pelanggan untuk melihat paket dan total tagihan</span>
+                </div>
 
                 <form action="{{ route('pembayaran.store') }}" method="POST" class="row g-3 align-items-end">
                     @csrf
                     <div class="col-md-4">
                         <label class="form-label mb-1">Pelanggan :</label>
-                        <select name="id_pelanggan" class="form-select" required>
+                        <select name="id_pelanggan" id="pelanggan-select" class="form-select" required>
                             <option value="">Pilih pelanggan</option>
                             @foreach($pelangganOptions as $pelanggan)
-                                <option value="{{ $pelanggan->id_pelanggan }}" @selected((string) old('id_pelanggan') === (string) $pelanggan->id_pelanggan)>
+                                <option value="{{ $pelanggan->id_pelanggan }}" data-harga="{{ $pelanggan->paket->harga ?? 0 }}" data-paket="{{ $pelanggan->paket->nama_paket ?? '-' }}" @selected((string) old('id_pelanggan') === (string) $pelanggan->id_pelanggan)>
                                     {{ $pelanggan->nama_pelanggan }} ({{ $pelanggan->username_mikrotik }})
                                 </option>
                             @endforeach
@@ -171,7 +169,7 @@
                         <label class="form-label mb-1">Jumlah Nominal Bayar (Rp):</label>
                         <div class="input-group">
                             <span class="input-group-text bg-white border-2 border-dark fw-bold">Rp</span>
-                            <input type="number" step="0.01" min="0" name="nominal" class="form-control fw-bold" value="{{ old('nominal') }}" required>
+                            <input type="number" step="0.01" min="0" id="nominal-input" name="nominal" class="form-control fw-bold" value="{{ old('nominal') }}" required>
                         </div>
                     </div>
                     <div class="col-md-8">
@@ -254,3 +252,30 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const pelangganSelect = document.getElementById('pelanggan-select');
+        const nominalInput = document.getElementById('nominal-input');
+        const clientInfo = document.getElementById('client-info');
+
+        function updateClientInfo() {
+            const selectedOption = pelangganSelect.options[pelangganSelect.selectedIndex];
+            if (selectedOption.value === '') {
+                clientInfo.textContent = 'Pilih pelanggan untuk melihat paket dan total tagihan';
+                nominalInput.value = '';
+            } else {
+                const namaClient = selectedOption.textContent.split('(')[0].trim();
+                const harga = selectedOption.dataset.harga || '0';
+                const paketNama = selectedOption.dataset.paket || '-';
+                clientInfo.textContent = `Client: ${namaClient} | Paket: ${paketNama} | Total Tagihan: Rp ${new Intl.NumberFormat('id-ID').format(harga)}`;
+                nominalInput.value = harga;
+            }
+        }
+
+        pelangganSelect.addEventListener('change', updateClientInfo);
+        updateClientInfo();
+    });
+</script>
+@endpush

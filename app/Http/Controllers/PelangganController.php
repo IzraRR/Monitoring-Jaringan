@@ -8,9 +8,27 @@ use App\Services\MikrotikService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Str;
 
 class PelangganController extends Controller
 {
+    /**
+     * Deteksi tipe koneksi berdasarkan nama paket pelanggan.
+     * Jika nama paket mengandung "pppoe" (case-insensitive), return "PPPoE".
+     * Sebaliknya, return "Hotspot".
+     * 
+     * @param Pelanggan $pelanggan
+     * @return string 'Hotspot' atau 'PPPoE'
+     */
+    private function detectTypeFromPaket(Pelanggan $pelanggan): string
+    {
+        $pelanggan->loadMissing('paket');
+        $namaPaket = $pelanggan->paket?->nama_paket ?? '';
+        
+        // Convert ke lowercase terlebih dahulu untuk pendeteksian case-insensitive yang reliable
+        return Str::contains(strtolower($namaPaket), 'pppoe') ? 'PPPoE' : 'Hotspot';
+    }
+
     public function index(Request $request): View
     {
         $search = trim((string) $request->query('q', ''));
@@ -58,15 +76,25 @@ class PelangganController extends Controller
             'status_aktif' => ['required', 'in:Aktif,Nonaktif,Locked'],
         ]);
 
-        $pelanggan = Pelanggan::create($validated);
-        $sync = $mikrotikService->syncPelangganCreated($pelanggan);
+        try {
+            $pelanggan = Pelanggan::create($validated);
+            $pelanggan->loadMissing('paket');
+            
+            // Deteksi tipe koneksi dari nama paket secara otomatis
+            $tipe = $this->detectTypeFromPaket($pelanggan);
+            
+            // Sinkronkan ke MikroTik dengan tipe yang terdeteksi
+            $sync = $mikrotikService->syncPelangganCreatedByType($pelanggan, $tipe);
 
-        $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil ditambahkan.');
-        if (!$sync['success']) {
-            $redirect->with('warning', $sync['message']);
+            $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil ditambahkan.');
+            if (!$sync['success']) {
+                $redirect->with('warning', $sync['message']);
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            return redirect()->back()->withInput()->with('error', 'Gagal menambahkan pelanggan: ' . $e->getMessage());
         }
-
-        return $redirect;
     }
 
     public function edit(Pelanggan $pelanggan): View
@@ -89,30 +117,50 @@ class PelangganController extends Controller
             'status_aktif' => ['required', 'in:Aktif,Nonaktif,Locked'],
         ]);
 
-        $oldUsername = $pelanggan->username_mikrotik;
-        $pelanggan->update($validated);
-        $sync = $mikrotikService->syncPelangganUpdated($pelanggan, $oldUsername);
+        try {
+            $oldUsername = $pelanggan->username_mikrotik;
+            $pelanggan->update($validated);
+            $pelanggan->refresh();
+            
+            // Deteksi tipe koneksi dari nama paket secara otomatis
+            $tipe = $this->detectTypeFromPaket($pelanggan);
+            
+            // Sinkronkan update ke MikroTik dengan tipe yang terdeteksi
+            $sync = $mikrotikService->syncPelangganUpdatedByType($pelanggan, $oldUsername, $tipe);
 
-        $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil diperbarui.');
-        if (!$sync['success']) {
-            $redirect->with('warning', $sync['message']);
+            $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil diperbarui.');
+            if (!$sync['success']) {
+                $redirect->with('warning', $sync['message']);
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            return redirect()->back()->withInput()->with('error', 'Gagal memperbarui pelanggan: ' . $e->getMessage());
         }
-
-        return $redirect;
     }
 
     public function destroy(Pelanggan $pelanggan, MikrotikService $mikrotikService): RedirectResponse
     {
-        $username = $pelanggan->username_mikrotik;
-        $pelanggan->delete();
-        $sync = $mikrotikService->syncPelangganDeleted($username);
+        try {
+            $username = $pelanggan->username_mikrotik;
+            
+            // Deteksi tipe koneksi dari nama paket sebelum data dihapus
+            $tipe = $this->detectTypeFromPaket($pelanggan);
+            
+            $pelanggan->delete();
+            
+            // Hapus dari MikroTik dengan tipe koneksi yang terdeteksi
+            $sync = $mikrotikService->syncPelangganDeletedByType($username, $tipe);
 
-        $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil dihapus.');
-        if (!$sync['success']) {
-            $redirect->with('warning', $sync['message']);
+            $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil dihapus.');
+            if (!$sync['success']) {
+                $redirect->with('warning', $sync['message']);
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Gagal menghapus pelanggan: ' . $e->getMessage());
         }
-
-        return $redirect;
     }
 
     public function syncMikrotik(MikrotikService $mikrotikService): RedirectResponse
@@ -125,41 +173,57 @@ class PelangganController extends Controller
 
     public function toggleLock(Pelanggan $pelanggan, MikrotikService $mikrotikService): RedirectResponse
     {
-        $isLocked = strtolower((string) $pelanggan->status_aktif) === 'locked';
+        try {
+            $isLocked = strtolower((string) $pelanggan->status_aktif) === 'locked';
+            
+            // Deteksi tipe koneksi dari nama paket
+            $tipe = $this->detectTypeFromPaket($pelanggan);
 
-        if ($isLocked) {
-            $pelanggan->update(['status_aktif' => 'Aktif']);
-            $sync = $mikrotikService->setPelangganState($pelanggan->fresh(), true);
-            $message = 'Pelanggan dibuka kembali.';
-        } else {
-            $pelanggan->update(['status_aktif' => 'Locked']);
-            $sync = $mikrotikService->setPelangganState($pelanggan->fresh(), false);
-            $message = 'Pelanggan berhasil dikunci.';
+            if ($isLocked) {
+                $pelanggan->update(['status_aktif' => 'Aktif']);
+                $sync = $mikrotikService->setPelangganStateByType($pelanggan->fresh(), true, $tipe);
+                $message = 'Pelanggan dibuka kembali.';
+            } else {
+                $pelanggan->update(['status_aktif' => 'Locked']);
+                $sync = $mikrotikService->setPelangganStateByType($pelanggan->fresh(), false, $tipe);
+                $message = 'Pelanggan berhasil dikunci.';
+            }
+
+            $redirect = redirect()->route('pelanggan.index')->with('success', $message);
+            if (!$sync['success']) {
+                $redirect->with('warning', $sync['message']);
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Gagal mengubah status pelanggan di MikroTik: ' . $e->getMessage());
         }
-
-        $redirect = redirect()->route('pelanggan.index')->with('success', $message);
-        if (!$sync['success']) {
-            $redirect->with('warning', $sync['message']);
-        }
-
-        return $redirect;
     }
 
     public function disconnect(Pelanggan $pelanggan, MikrotikService $mikrotikService): RedirectResponse
     {
-        $syncDisconnect = $mikrotikService->disconnectActiveSession($pelanggan);
+        try {
+            // Deteksi tipe koneksi dari nama paket
+            $tipe = $this->detectTypeFromPaket($pelanggan);
+            
+            // Putus sesi aktif dengan tipe koneksi yang terdeteksi
+            $syncDisconnect = $mikrotikService->disconnectActiveSessionByType($pelanggan, $tipe);
 
-        $pelanggan->update(['status_aktif' => 'Nonaktif']);
-        $syncDisable = $mikrotikService->setPelangganState($pelanggan->fresh(), false);
+            // Update status menjadi nonaktif dan disable user di MikroTik
+            $pelanggan->update(['status_aktif' => 'Nonaktif']);
+            $syncDisable = $mikrotikService->setPelangganStateByType($pelanggan->fresh(), false, $tipe);
 
-        $redirect = redirect()->route('pelanggan.index')->with('success', 'User berhasil dinonaktifkan dan sesi aktif diputus.');
+            $redirect = redirect()->route('pelanggan.index')->with('success', 'User berhasil dinonaktifkan dan sesi aktif diputus.');
 
-        if (!$syncDisconnect['success']) {
-            $redirect->with('warning', $syncDisconnect['message']);
-        } elseif (!$syncDisable['success']) {
-            $redirect->with('warning', $syncDisable['message']);
+            if (!$syncDisconnect['success']) {
+                $redirect->with('warning', $syncDisconnect['message']);
+            } elseif (!$syncDisable['success']) {
+                $redirect->with('warning', $syncDisable['message']);
+            }
+
+            return $redirect;
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', 'Gagal memutuskan sesi di MikroTik: ' . $e->getMessage());
         }
-
-        return $redirect;
     }
 }

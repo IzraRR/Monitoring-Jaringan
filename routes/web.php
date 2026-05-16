@@ -39,5 +39,7 @@ Route::middleware('admin.auth')->group(function () {
     Route::post('/pembayaran/notifikasi/kirim', [PembayaranController::class, 'sendNotifications'])->name('pembayaran.send-notifications');
     Route::get('/log', [LogAktivitasController::class, 'index'])->name('log.index');
     Route::get('/laporan', [LaporanController::class, 'index'])->name('laporan.index');
+    Route::get('/laporan/cetak', [LaporanController::class, 'cetakPdf'])->name('laporan.cetak');
+    Route::get('/dashboard/realtime-stats', [DashboardController::class, 'getRealtimeStats'])->name('dashboard.realtime-stats');
     Route::get('/password', [PasswordController::class, 'index'])->name('password.index');
 });

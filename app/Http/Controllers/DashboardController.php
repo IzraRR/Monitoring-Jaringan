@@ -6,6 +6,7 @@ use App\Models\PaketBandwidth;
 use App\Models\Pelanggan;
 use App\Models\Pembayaran;
 use App\Services\MikrotikService;
+use Illuminate\Http\JsonResponse;
 
 class DashboardController extends Controller
 {
@@ -36,6 +37,7 @@ class DashboardController extends Controller
             ->count();
 
         $mikrotik = $mikrotikService->getSystemSummary();
+        $realtimeStats = $mikrotikService->getRealtimeStats();
 
         return view('dashboard', [
             'stats' => $stats,
@@ -43,10 +45,16 @@ class DashboardController extends Controller
             'trafficData' => $trafficSeries->pluck('usage_mb')->map(fn ($value) => round((float) $value, 2))->values(),
             'anomaliHariIni' => $anomaliHariIni,
             'mikrotik' => $mikrotik,
+            'realtimeStats' => $realtimeStats,
             'recentPayments' => Pembayaran::with('pelanggan')
                 ->latest('tanggal_bayar')
                 ->limit(5)
                 ->get(),
         ]);
+    }
+
+    public function getRealtimeStats(MikrotikService $mikrotikService): JsonResponse
+    {
+        return response()->json($mikrotikService->getRealtimeStats());
     }
 }

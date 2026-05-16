@@ -5,18 +5,42 @@ namespace App\Http\Controllers;
 use App\Models\Pelanggan;
 use App\Models\Pembayaran;
 use App\Services\MikrotikService;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PembayaranController extends Controller
 {
+    private function normalizeWhatsAppNumber(?string $rawNumber): string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $rawNumber) ?? '';
+
+        if ($digits === '') {
+            return '';
+        }
+
+        // Konversi format lokal 08xxxx menjadi 628xxxx.
+        if (str_starts_with($digits, '0')) {
+            $digits = '62' . substr($digits, 1);
+        }
+
+        // Jika masih tanpa prefix negara, default ke Indonesia.
+        if (!str_starts_with($digits, '62')) {
+            $digits = '62' . ltrim($digits, '0');
+        }
+
+        return $digits;
+    }
+
     public function index(Request $request): View
     {
+
         $search = trim((string) $request->query('q', ''));
 
-        $pembayaran = Pembayaran::with(['pelanggan'])
+        $pembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('periode_tagihan', 'like', "%{$search}%")
@@ -36,7 +60,7 @@ class PembayaranController extends Controller
         return view('pembayaran.index', [
             'pembayaran' => $pembayaran,
             'search' => $search,
-            'pelangganOptions' => Pelanggan::orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik']),
+            'pelangganOptions' => Pelanggan::with('paket')->orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik', 'id_paket']),
             'rekap' => [
                 'total_nominal' => Pembayaran::sum('nominal'),
                 'bulan_ini' => Pembayaran::whereYear('tanggal_bayar', now()->year)
@@ -64,7 +88,7 @@ class PembayaranController extends Controller
         $validated = $request->validate([
             'id_pelanggan' => ['required', 'exists:pelanggan,id_pelanggan'],
             'tanggal_bayar' => ['required', 'date'],
-            'nominal' => ['required', 'numeric', 'min:0'],
+            'nominal' => ['required', 'numeric', 'min:100'],
             'periode_tagihan' => ['required', 'string', 'max:30'],
             'status_notifikasi' => ['nullable', 'in:Pending,Send,Failed'],
         ]);
@@ -74,9 +98,10 @@ class PembayaranController extends Controller
 
         $masaAktifBaru = null;
         $pelanggan = null;
+        $pembayaranBaru = null;
 
-        DB::transaction(function () use (&$masaAktifBaru, &$pelanggan, $validated) {
-            Pembayaran::create($validated);
+        DB::transaction(function () use (&$masaAktifBaru, &$pelanggan, &$pembayaranBaru, $validated) {
+            $pembayaranBaru = Pembayaran::create($validated);
 
             $pelanggan = Pelanggan::findOrFail($validated['id_pelanggan']);
 
@@ -96,11 +121,97 @@ class PembayaranController extends Controller
         });
 
         $sync = $mikrotikService->setPelangganState($pelanggan->fresh(), true);
+        $notifikasiStatus = 'Failed';
+        $notifikasiMessage = null;
+
+        try {
+            if ($pembayaranBaru) {
+                $waEnabled = (bool) config('services.whatsapp.enabled', true);
+                $apiUrl = (string) config('services.whatsapp.url', 'https://api.fonnte.com/send');
+                $apiToken = (string) config('services.whatsapp.token', '');
+                $countryCode = (string) config('services.whatsapp.country_code', '62');
+                $targetNumber = $this->normalizeWhatsAppNumber($pelanggan->no_hp ?? '');
+
+                if (!$waEnabled) {
+                    $notifikasiStatus = 'Failed';
+                    $notifikasiMessage = 'WA gateway dinonaktifkan melalui konfigurasi.';
+                } elseif ($targetNumber === '') {
+                    $notifikasiStatus = 'Failed';
+                    $notifikasiMessage = 'Nomor WhatsApp pelanggan kosong / tidak valid.';
+                } elseif ($apiToken === '') {
+                    $notifikasiStatus = 'Failed';
+                    $notifikasiMessage = 'Token WhatsApp API belum diatur.';
+                } else {
+                    $pesanResi = "Halo {$pelanggan->nama_pelanggan}, pembayaran Anda telah diterima.\n"
+                        . "Periode: {$pembayaranBaru->periode_tagihan}\n"
+                        . 'Nominal: Rp ' . number_format((float) $pembayaranBaru->nominal, 0, ',', '.') . "\n"
+                        . 'Tanggal: ' . optional($pembayaranBaru->tanggal_bayar)->format('d/m/Y') . "\n"
+                        . "Status: LUNAS";
+
+                    $response = Http::asForm()
+                        ->timeout(20)
+                        ->withHeaders([
+                            // Fonnte membutuhkan token langsung di header Authorization (bukan Bearer).
+                            'Authorization' => $apiToken,
+                            'Accept' => 'application/json',
+                        ])
+                        ->post($apiUrl, [
+                            'target' => $targetNumber,
+                            'message' => $pesanResi,
+                            'countryCode' => $countryCode,
+                        ]);
+
+                    if ($response->successful()) {
+                        $payload = $response->json();
+                        $apiStatus = $payload['status'] ?? $payload['success'] ?? true;
+                        $notifikasiStatus = ($apiStatus === true || $apiStatus === 'true' || $apiStatus === 1 || $apiStatus === '1')
+                            ? 'Send'
+                            : 'Failed';
+                        $notifikasiMessage = is_array($payload)
+                            ? (string) ($payload['reason'] ?? $payload['message'] ?? $response->body())
+                            : $response->body();
+                    } else {
+                        $notifikasiStatus = 'Failed';
+                        $notifikasiMessage = 'HTTP ' . $response->status() . ': ' . $response->body();
+                    }
+                }
+
+                if ($notifikasiStatus !== 'Send') {
+                    Log::warning('WhatsApp receipt notification failed', [
+                        'id_pembayaran' => $pembayaranBaru?->id_pembayaran,
+                        'id_pelanggan' => $pelanggan?->id_pelanggan,
+                        'target' => $targetNumber,
+                        'reason' => $notifikasiMessage,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp receipt notification failed', [
+                'id_pembayaran' => $pembayaranBaru?->id_pembayaran,
+                'id_pelanggan' => $pelanggan?->id_pelanggan,
+                'error' => $e->getMessage(),
+            ]);
+            $notifikasiStatus = 'Failed';
+            $notifikasiMessage = $e->getMessage();
+        }
+
+        if ($pembayaranBaru) {
+            $pembayaranBaru->update([
+                'status_notifikasi' => $notifikasiStatus,
+            ]);
+        }
+
         $redirect = redirect()->route('pembayaran.index')
             ->with('success', 'Pembayaran berhasil diproses. Masa aktif diperpanjang sampai ' . $masaAktifBaru->format('d/m/Y') . '.');
 
         if (!$sync['success']) {
             $redirect->with('warning', $sync['message']);
+        }
+
+        if ($notifikasiStatus === 'Send') {
+            $redirect->with('success', 'Pembayaran berhasil diproses dan resi WhatsApp terkirim. Masa aktif diperpanjang sampai ' . $masaAktifBaru->format('d/m/Y') . '.');
+        } else {
+            $redirect->with('warning', 'Pembayaran tersimpan, tetapi resi WhatsApp gagal dikirim. Status notifikasi: Failed. ' . ($notifikasiMessage ? 'Detail: ' . $notifikasiMessage : ''));
         }
 
         return $redirect;

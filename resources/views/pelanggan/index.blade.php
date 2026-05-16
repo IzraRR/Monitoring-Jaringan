@@ -77,7 +77,7 @@
                         <tr>
                             <td>{{ $item->id_pelanggan }}</td>
                             <td>{{ $item->nama_pelanggan }}</td>
-                            <td>{{ strtoupper(config('services.mikrotik.sync_mode', 'hotspot')) === 'PPPOE' ? 'PPPoE' : 'Hotspot' }}</td>
+                            <td>{{ Str::contains(strtolower($item->paket->nama_paket ?? ''), 'pppoe') ? 'PPPoE' : 'Hotspot' }}</td>
                             <td>{{ $item->username_mikrotik }}</td>
                             <td>{{ $item->paket->nama_paket ?? '-' }}</td>
                             <td>{{ optional($item->masa_aktif)->format('d/m/Y') ?? '-' }}</td>
