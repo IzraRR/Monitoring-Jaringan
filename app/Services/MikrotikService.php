@@ -676,6 +676,96 @@ class MikrotikService
     }
 
     /**
+     * Tambah Profil Hotspot ke MikroTik (endpoint: /ip/hotspot/user-profile/add)
+     * Method ini MURNI untuk Hotspot profiles, tidak pernah digunakan untuk PPPoE.
+     * 
+     * @param PaketBandwidth $paket
+     * @return array ['success' => bool, 'message' => string]
+     */
+    public function tambahProfilHotspot(PaketBandwidth $paket): array
+    {
+        if (!$this->shouldSync()) {
+            return ['success' => true, 'message' => 'Sinkronisasi MikroTik dinonaktifkan.'];
+        }
+
+        try {
+            $api = $this->makeLegacyClient();
+            $payload = [
+                'name' => $paket->nama_paket,
+            ];
+
+            $rateLimit = $this->formatRateLimit($paket);
+            if ($rateLimit !== '') {
+                $payload['rate-limit'] = $rateLimit;
+            }
+
+            // Cek apakah profil sudah ada
+            $existing = $api->comm('/ip/hotspot/user-profile/print', ['?name' => $paket->nama_paket]);
+            $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
+
+            if ($entry && isset($entry['.id'])) {
+                $payload['.id'] = $entry['.id'];
+                $api->comm('/ip/hotspot/user-profile/set', $payload);
+                return ['success' => true, 'message' => 'Profil Hotspot berhasil diperbarui di MikroTik.'];
+            }
+
+            $api->comm('/ip/hotspot/user-profile/add', $payload);
+            return ['success' => true, 'message' => 'Profil Hotspot berhasil ditambahkan ke MikroTik.'];
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik tambah profil hotspot failed', [
+                'nama_paket' => $paket->nama_paket,
+                'error' => $e->getMessage(),
+            ]);
+            return ['success' => false, 'message' => 'Gagal tambah profil Hotspot: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Tambah Profil PPPoE ke MikroTik (endpoint: /ppp/profile/add)
+     * Method ini MURNI untuk PPPoE profiles, tidak pernah digunakan untuk Hotspot.
+     * 
+     * @param PaketBandwidth $paket
+     * @return array ['success' => bool, 'message' => string]
+     */
+    public function tambahProfilPPPoE(PaketBandwidth $paket): array
+    {
+        if (!$this->shouldSync()) {
+            return ['success' => true, 'message' => 'Sinkronisasi MikroTik dinonaktifkan.'];
+        }
+
+        try {
+            $api = $this->makeLegacyClient();
+            $payload = [
+                'name' => $paket->nama_paket,
+            ];
+
+            $rateLimit = $this->formatRateLimit($paket);
+            if ($rateLimit !== '') {
+                $payload['rate-limit'] = $rateLimit;
+            }
+
+            // Cek apakah profil sudah ada
+            $existing = $api->comm('/ppp/profile/print', ['?name' => $paket->nama_paket]);
+            $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
+
+            if ($entry && isset($entry['.id'])) {
+                $payload['.id'] = $entry['.id'];
+                $api->comm('/ppp/profile/set', $payload);
+                return ['success' => true, 'message' => 'Profil PPPoE berhasil diperbarui di MikroTik.'];
+            }
+
+            $api->comm('/ppp/profile/add', $payload);
+            return ['success' => true, 'message' => 'Profil PPPoE berhasil ditambahkan ke MikroTik.'];
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik tambah profil pppoe failed', [
+                'nama_paket' => $paket->nama_paket,
+                'error' => $e->getMessage(),
+            ]);
+            return ['success' => false, 'message' => 'Gagal tambah profil PPPoE: ' . $e->getMessage()];
+        }
+    }
+
+    /**
      * Sinkronkan data pelanggan baru ke MikroTik berdasarkan tipe koneksi.
      * 
      * @param Pelanggan $pelanggan

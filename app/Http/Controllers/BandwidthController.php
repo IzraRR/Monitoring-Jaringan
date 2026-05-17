@@ -78,10 +78,14 @@ class BandwidthController extends Controller
         $paket = PaketBandwidth::create($validated);
 
         // Deteksi tipe berdasarkan nama paket (case-insensitive)
-        $tipe = Str::contains(strtolower($paket->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot';
-
+        $namaPaket = strtolower(trim($paket->nama_paket));
+        
         try {
-            $sync = $mikrotikService->ensureProfileExistsByType($paket, $tipe);
+            if (stripos($namaPaket, 'pppoe') !== false) {
+                $sync = $mikrotikService->tambahProfilPPPoE($paket);
+            } else {
+                $sync = $mikrotikService->tambahProfilHotspot($paket);
+            }
         } catch (\Throwable $e) {
             $sync = ['success' => false, 'message' => $e->getMessage()];
         }
@@ -120,18 +124,26 @@ class BandwidthController extends Controller
         $fresh = $bandwidth->fresh();
 
         // Deteksi tipe baru berdasarkan nama paket
-        $tipe = Str::contains(strtolower($fresh->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot';
-
+        $namaPaketBaru = strtolower(trim($fresh->nama_paket));
+        
         try {
-            $sync = $mikrotikService->ensureProfileExistsByType($fresh, $tipe);
+            if (stripos($namaPaketBaru, 'pppoe') !== false) {
+                $sync = $mikrotikService->tambahProfilPPPoE($fresh);
+            } else {
+                $sync = $mikrotikService->tambahProfilHotspot($fresh);
+            }
         } catch (\Throwable $e) {
             $sync = ['success' => false, 'message' => $e->getMessage()];
         }
 
         if ($oldProfileName !== $fresh->nama_paket) {
-            $oldTipe = Str::contains(strtolower($oldProfileName), 'pppoe') ? 'PPPoE' : 'Hotspot';
+            $namaPaketLama = strtolower(trim($oldProfileName));
             try {
-                $removeOld = $mikrotikService->removeProfileIfUnusedByType($oldProfileName, $oldTipe);
+                if (stripos($namaPaketLama, 'pppoe') !== false) {
+                    $removeOld = $mikrotikService->removeProfileIfUnusedByType($oldProfileName, 'PPPoE');
+                } else {
+                    $removeOld = $mikrotikService->removeProfileIfUnusedByType($oldProfileName, 'Hotspot');
+                }
             } catch (\Throwable $e) {
                 $removeOld = ['success' => false, 'message' => $e->getMessage()];
             }
@@ -160,7 +172,8 @@ class BandwidthController extends Controller
         $profileName = $bandwidth->nama_paket;
 
         // Deteksi tipe berdasarkan nama paket sebelum dihapus
-        $tipe = Str::contains(strtolower($profileName), 'pppoe') ? 'PPPoE' : 'Hotspot';
+        $namaPaket = strtolower(trim($profileName));
+        $tipe = stripos($namaPaket, 'pppoe') !== false ? 'PPPoE' : 'Hotspot';
 
         $bandwidth->delete();
 
