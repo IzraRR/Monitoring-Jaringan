@@ -77,7 +77,11 @@
                         <tr>
                             <td>{{ $item->id_pelanggan }}</td>
                             <td>{{ $item->nama_pelanggan }}</td>
-                            <td>{{ Str::contains(strtolower($item->paket->nama_paket ?? ''), 'pppoe') ? 'PPPoE' : 'Hotspot' }}</td>
+                            <td>
+                                <span class="badge {{ Str::contains(strtolower($item->paket->nama_paket ?? ''), 'pppoe') ? 'bg-info' : 'bg-primary' }}">
+                                    {{ Str::contains(strtolower($item->paket->nama_paket ?? ''), 'pppoe') ? 'PPPoE' : 'Hotspot' }}
+                                </span>
+                            </td>
                             <td>{{ $item->username_mikrotik }}</td>
                             <td>{{ $item->paket->nama_paket ?? '-' }}</td>
                             <td>{{ optional($item->masa_aktif)->format('d/m/Y') ?? '-' }}</td>

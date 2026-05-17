@@ -585,6 +585,7 @@ class MikrotikService
     /**
      * Tambah user ke Hotspot MikroTik (endpoint: /ip/hotspot/user/add)
      * Method ini MURNI untuk Hotspot saja, tidak pernah digunakan untuk PPPoE.
+     * Menangani "already exists" dengan logic print -> set atau add.
      * 
      * @param Pelanggan $pelanggan
      * @return array ['success' => bool, 'message' => string]
@@ -598,7 +599,8 @@ class MikrotikService
         try {
             $pelanggan->loadMissing('paket');
             if ($pelanggan->paket) {
-                $profileSync = $this->ensureProfileExists($pelanggan->paket);
+                // BUG FIX: Wajib pakai ByType 'Hotspot'
+                $profileSync = $this->ensureProfileExistsByType($pelanggan->paket, 'Hotspot');
                 if (!$profileSync['success']) {
                     return $profileSync;
                 }
@@ -616,9 +618,18 @@ class MikrotikService
                 $payload['profile'] = $profile;
             }
 
-            $api->comm('/ip/hotspot/user/add', $payload);
+            // BUG FIX: Cek apakah user sudah ada (Untuk fitur Sync)
+            $existing = $api->comm('/ip/hotspot/user/print', ['?name' => $pelanggan->username_mikrotik]);
+            $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
 
-            return ['success' => true, 'message' => 'User Hotspot berhasil ditambahkan ke MikroTik.'];
+            if ($entry && isset($entry['.id'])) {
+                $payload['.id'] = $entry['.id'];
+                $api->comm('/ip/hotspot/user/set', $payload);
+                return ['success' => true, 'message' => 'User Hotspot berhasil diperbarui (Sync).'];
+            }
+
+            $api->comm('/ip/hotspot/user/add', $payload);
+            return ['success' => true, 'message' => 'User Hotspot berhasil ditambahkan.'];
         } catch (\Throwable $e) {
             Log::warning('MikroTik tambah user hotspot failed', [
                 'username' => $pelanggan->username_mikrotik,
@@ -631,6 +642,7 @@ class MikrotikService
     /**
      * Tambah user ke PPPoE MikroTik (endpoint: /ppp/secret/add)
      * Method ini MURNI untuk PPPoE saja, WAJIB menyertakan service=pppoe.
+     * Menangani "already exists" dengan logic print -> set atau add.
      * 
      * @param Pelanggan $pelanggan
      * @return array ['success' => bool, 'message' => string]
@@ -644,7 +656,8 @@ class MikrotikService
         try {
             $pelanggan->loadMissing('paket');
             if ($pelanggan->paket) {
-                $profileSync = $this->ensureProfileExists($pelanggan->paket);
+                // BUG FIX: Wajib pakai ByType 'PPPoE'
+                $profileSync = $this->ensureProfileExistsByType($pelanggan->paket, 'PPPoE');
                 if (!$profileSync['success']) {
                     return $profileSync;
                 }
@@ -663,9 +676,18 @@ class MikrotikService
                 $payload['profile'] = $profile;
             }
 
-            $api->comm('/ppp/secret/add', $payload);
+            // BUG FIX: Cek apakah user sudah ada (Untuk fitur Sync)
+            $existing = $api->comm('/ppp/secret/print', ['?name' => $pelanggan->username_mikrotik]);
+            $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
 
-            return ['success' => true, 'message' => 'User PPPoE berhasil ditambahkan ke MikroTik.'];
+            if ($entry && isset($entry['.id'])) {
+                $payload['.id'] = $entry['.id'];
+                $api->comm('/ppp/secret/set', $payload);
+                return ['success' => true, 'message' => 'User PPPoE berhasil diperbarui (Sync).'];
+            }
+
+            $api->comm('/ppp/secret/add', $payload);
+            return ['success' => true, 'message' => 'User PPPoE berhasil ditambahkan.'];
         } catch (\Throwable $e) {
             Log::warning('MikroTik tambah user pppoe failed', [
                 'username' => $pelanggan->username_mikrotik,

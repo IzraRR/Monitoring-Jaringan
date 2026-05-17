@@ -38,7 +38,7 @@
             <table class="table table-bordered table-hover mb-0 text-center align-middle" style="border-color: #475569;">
                 <thead style="background-color: #cbd5e1; color: black;">
                     <tr>
-                        <th class="py-3">ID</th><th class="py-3">Nama Profil</th><th class="py-3">Tipe</th><th class="py-3">Limit Download</th><th class="py-3">Limit Upload</th><th class="py-3">Status</th><th class="py-3">Aksi</th>
+                        <th class="py-3">ID</th><th class="py-3">Nama Profil</th><th class="py-3">Tipe</th><th class="py-3">Limit Download</th><th class="py-3">Limit Upload</th><th class="py-3">Harga</th><th class="py-3">Status</th><th class="py-3">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="fw-medium text-dark">
@@ -46,30 +46,42 @@
                         <tr>
                             <td>{{ $item->id_paket }}</td>
                             <td>{{ $item->nama_paket }}</td>
-                            <td>{{ Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot' }}</td>
+                            <td>
+                                <span class="badge {{ Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'bg-info' : 'bg-primary' }}">
+                                    {{ Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot' }}
+                                </span>
+                            </td>
                             <td>{{ $item->limit_download }}</td>
                             <td>{{ $item->limit_upload }}</td>
+                            <td>Rp {{ number_format($item->harga, 0, ',', '.') }}</td>
                             <td>
                                 @if($item->pelanggan_aktif_count > 0)
-                                    <span class="badge bg-success">Aktif</span>
+                                    <span class="badge bg-success">{{ $item->pelanggan_aktif_count }} Aktif</span>
                                 @elseif($item->pelanggan_count > 0)
-                                    <span class="badge bg-warning text-dark">Locked/Nonaktif</span>
+                                    <span class="badge bg-warning text-dark">{{ $item->pelanggan_count }} Locked/Nonaktif</span>
                                 @else
                                     <span class="badge bg-secondary">Kosong</span>
                                 @endif
                             </td>
                             <td>
-                                <a href="{{ route('bandwidth.edit', $item) }}" class="text-warning me-2" title="Edit"><i class="bi bi-pencil-fill"></i></a>
-                                <form action="{{ route('bandwidth.destroy', $item) }}" method="POST" class="d-inline" onsubmit="return confirm('Hapus paket bandwidth ini?')">
+                                <!-- Tombol 1: Edit -->
+                                <a href="{{ route('bandwidth.edit', $item) }}" class="btn btn-sm btn-outline-primary me-1" title="Edit Profil">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                
+                                <!-- Tombol 2: Hapus (Form DELETE) -->
+                                <form action="{{ route('bandwidth.destroy', $item) }}" method="POST" class="d-inline form-delete-bandwidth">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="btn btn-link p-0 text-secondary" title="Hapus"><i class="bi bi-trash-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Hapus Profil">
+                                        <i class="bi bi-trash-fill"></i>
+                                    </button>
                                 </form>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="py-4 text-muted">Belum ada data paket bandwidth.</td>
+                            <td colspan="8" class="py-4 text-muted">Belum ada data paket bandwidth.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -81,4 +93,31 @@
         <div>{{ $paket->links() }}</div>
     </div>
 </div>
+
+<!-- CDN SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    // Konfirmasi Hapus Profil Bandwidth dengan SweetAlert2
+    document.querySelectorAll('.form-delete-bandwidth').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            Swal.fire({
+                title: '⚠️ HAPUS PROFIL BANDWIDTH',
+                html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MENGHAPUS</strong> profil bandwidth ini?<br><br>Profil juga akan dihapus dari <strong>MikroTik</strong>.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Hapus!',
+                cancelButtonText: 'Batal',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+</script>
 @endsection
