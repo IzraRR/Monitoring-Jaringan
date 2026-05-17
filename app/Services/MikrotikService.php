@@ -5,6 +5,7 @@ namespace App\Services;
 require_once __DIR__ . '/routeros_api.class.php';
 use App\Models\PaketBandwidth;
 use App\Models\Pelanggan;
+use App\Exceptions\MikrotikConnectionException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -42,8 +43,7 @@ class MikrotikService
      */
     private function getBasePathByType(string $tipe): string
     {
-        $tipe = strtolower(trim($tipe));
-        return $tipe === 'pppoe' ? self::PPPOE_SECRET_PATH : self::HOTSPOT_USER_PATH;
+        return trim($tipe) === 'PPPoE' ? self::PPPOE_SECRET_PATH : self::HOTSPOT_USER_PATH;
     }
 
     /**
@@ -179,22 +179,18 @@ class MikrotikService
             return $result;
         }
 
-        try {
-            $client = $this->makeLegacyClient();
+        $client = $this->makeLegacyClient();
 
-            $identityResponse = $client->comm('/system/identity/print');
-            $resourceResponse = $client->comm('/system/resource/print');
+        $identityResponse = $client->comm('/system/identity/print');
+        $resourceResponse = $client->comm('/system/resource/print');
 
-            $identity = is_array($identityResponse) && isset($identityResponse[0]) ? $identityResponse[0] : [];
-            $resource = is_array($resourceResponse) && isset($resourceResponse[0]) ? $resourceResponse[0] : [];
+        $identity = is_array($identityResponse) && isset($identityResponse[0]) ? $identityResponse[0] : [];
+        $resource = is_array($resourceResponse) && isset($resourceResponse[0]) ? $resourceResponse[0] : [];
 
-            $result['connected'] = true;
-            $result['identity'] = $identity['name'] ?? null;
-            $result['uptime'] = $resource['uptime'] ?? null;
-            $result['cpu_load'] = isset($resource['cpu-load']) ? (int) $resource['cpu-load'] : null;
-        } catch (\Throwable $e) {
-            $result['error'] = $e->getMessage();
-        }
+        $result['connected'] = true;
+        $result['identity'] = $identity['name'] ?? null;
+        $result['uptime'] = $resource['uptime'] ?? null;
+        $result['cpu_load'] = isset($resource['cpu-load']) ? (int) $resource['cpu-load'] : null;
 
         return $result;
     }
@@ -223,30 +219,26 @@ class MikrotikService
             return $result;
         }
 
-        try {
-            $api = $this->makeLegacyClient();
+        $api = $this->makeLegacyClient();
 
-            $identity = $this->firstRecord($api->comm('/system/identity/print'));
-            $resource = $this->firstRecord($api->comm('/system/resource/print'));
+        $identity = $this->firstRecord($api->comm('/system/identity/print'));
+        $resource = $this->firstRecord($api->comm('/system/resource/print'));
 
-            $hotspotActive = $api->comm(self::HOTSPOT_ACTIVE_PATH . '/print');
-            $pppoeActive = $api->comm(self::PPPOE_ACTIVE_PATH . '/print');
+        $hotspotActive = $api->comm(self::HOTSPOT_ACTIVE_PATH . '/print');
+        $pppoeActive = $api->comm(self::PPPOE_ACTIVE_PATH . '/print');
 
-            $interfaceName = $this->resolveTrafficInterfaceName($api);
-            $traffic = $this->getInterfaceTrafficSnapshot($api, $interfaceName);
+        $interfaceName = $this->resolveTrafficInterfaceName($api);
+        $traffic = $this->getInterfaceTrafficSnapshot($api, $interfaceName);
 
-            $result['connected'] = true;
-            $result['identity'] = $identity['name'] ?? null;
-            $result['uptime'] = $resource['uptime'] ?? null;
-            $result['cpu_load'] = isset($resource['cpu-load']) ? (int) $resource['cpu-load'] : null;
-            $result['hotspot_active'] = is_array($hotspotActive) ? count($hotspotActive) : 0;
-            $result['pppoe_active'] = is_array($pppoeActive) ? count($pppoeActive) : 0;
-            $result['interface_name'] = $traffic['interface_name'] ?? $interfaceName;
-            $result['rx_bps'] = (int) ($traffic['rx_bps'] ?? 0);
-            $result['tx_bps'] = (int) ($traffic['tx_bps'] ?? 0);
-        } catch (\Throwable $e) {
-            $result['error'] = $e->getMessage();
-        }
+        $result['connected'] = true;
+        $result['identity'] = $identity['name'] ?? null;
+        $result['uptime'] = $resource['uptime'] ?? null;
+        $result['cpu_load'] = isset($resource['cpu-load']) ? (int) $resource['cpu-load'] : null;
+        $result['hotspot_active'] = is_array($hotspotActive) ? count($hotspotActive) : 0;
+        $result['pppoe_active'] = is_array($pppoeActive) ? count($pppoeActive) : 0;
+        $result['interface_name'] = $traffic['interface_name'] ?? $interfaceName;
+        $result['rx_bps'] = (int) ($traffic['rx_bps'] ?? 0);
+        $result['tx_bps'] = (int) ($traffic['tx_bps'] ?? 0);
 
         return $result;
     }
@@ -256,16 +248,26 @@ class MikrotikService
         $api = new \RouterosAPI();
         $api->port = (int) config('services.mikrotik.api_port', 8728);
         $api->ssl = (bool) config('services.mikrotik.api_ssl', false);
-        $api->timeout = (int) config('services.mikrotik.api_timeout', 10);
 
-        $connected = $api->connect(
-            (string) config('services.mikrotik.host'),
-            (string) config('services.mikrotik.user'),
-            (string) config('services.mikrotik.pass')
-        );
+        // Reduce attempts/delay and keep a very small timeout to avoid long PHP blocking
+        $api->timeout = min(2, max(1, (int) config('services.mikrotik.api_timeout', 2)));
+        $api->attempts = max(1, (int) config('services.mikrotik.api_attempts', 1));
+        $api->delay = (int) config('services.mikrotik.api_delay', 0);
+
+        $connected = false;
+        try {
+            $connected = $api->connect(
+                (string) config('services.mikrotik.host'),
+                (string) config('services.mikrotik.user'),
+                (string) config('services.mikrotik.pass')
+            );
+        } catch (\Throwable $e) {
+            throw new MikrotikConnectionException('Koneksi MikroTik Timeout/Gagal', 0, $e);
+        }
 
         if (!$connected) {
-            throw new \RuntimeException($api->getLastError() ?? 'Gagal terhubung ke RouterOS API.');
+            $lastError = $api->error_str ?? null;
+            throw new MikrotikConnectionException($lastError ?: 'Koneksi MikroTik Timeout/Gagal');
         }
 
         return $api;
@@ -581,6 +583,99 @@ class MikrotikService
     }
 
     /**
+     * Tambah user ke Hotspot MikroTik (endpoint: /ip/hotspot/user/add)
+     * Method ini MURNI untuk Hotspot saja, tidak pernah digunakan untuk PPPoE.
+     * 
+     * @param Pelanggan $pelanggan
+     * @return array ['success' => bool, 'message' => string]
+     */
+    public function tambahUserHotspot(Pelanggan $pelanggan): array
+    {
+        if (!$this->shouldSync()) {
+            return ['success' => true, 'message' => 'Sinkronisasi MikroTik dinonaktifkan.'];
+        }
+
+        try {
+            $pelanggan->loadMissing('paket');
+            if ($pelanggan->paket) {
+                $profileSync = $this->ensureProfileExists($pelanggan->paket);
+                if (!$profileSync['success']) {
+                    return $profileSync;
+                }
+            }
+
+            $api = $this->makeLegacyClient();
+            $payload = [
+                'name' => $pelanggan->username_mikrotik,
+                'password' => $pelanggan->password_mikrotik,
+                'disabled' => in_array(strtolower($pelanggan->status_aktif), ['nonaktif', 'locked'], true) ? 'yes' : 'no',
+            ];
+
+            $profile = $this->resolveProfile($pelanggan);
+            if (!empty($profile)) {
+                $payload['profile'] = $profile;
+            }
+
+            $api->comm('/ip/hotspot/user/add', $payload);
+
+            return ['success' => true, 'message' => 'User Hotspot berhasil ditambahkan ke MikroTik.'];
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik tambah user hotspot failed', [
+                'username' => $pelanggan->username_mikrotik,
+                'error' => $e->getMessage(),
+            ]);
+            return ['success' => false, 'message' => 'Gagal tambah user Hotspot: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Tambah user ke PPPoE MikroTik (endpoint: /ppp/secret/add)
+     * Method ini MURNI untuk PPPoE saja, WAJIB menyertakan service=pppoe.
+     * 
+     * @param Pelanggan $pelanggan
+     * @return array ['success' => bool, 'message' => string]
+     */
+    public function tambahUserPPPoE(Pelanggan $pelanggan): array
+    {
+        if (!$this->shouldSync()) {
+            return ['success' => true, 'message' => 'Sinkronisasi MikroTik dinonaktifkan.'];
+        }
+
+        try {
+            $pelanggan->loadMissing('paket');
+            if ($pelanggan->paket) {
+                $profileSync = $this->ensureProfileExists($pelanggan->paket);
+                if (!$profileSync['success']) {
+                    return $profileSync;
+                }
+            }
+
+            $api = $this->makeLegacyClient();
+            $payload = [
+                'name' => $pelanggan->username_mikrotik,
+                'password' => $pelanggan->password_mikrotik,
+                'disabled' => in_array(strtolower($pelanggan->status_aktif), ['nonaktif', 'locked'], true) ? 'yes' : 'no',
+                'service' => 'pppoe',
+            ];
+
+            $profile = $this->resolveProfile($pelanggan);
+            if (!empty($profile)) {
+                $payload['profile'] = $profile;
+            }
+
+            $api->comm('/ppp/secret/add', $payload);
+
+            return ['success' => true, 'message' => 'User PPPoE berhasil ditambahkan ke MikroTik.'];
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik tambah user pppoe failed', [
+                'username' => $pelanggan->username_mikrotik,
+                'error' => $e->getMessage(),
+            ]);
+            return ['success' => false, 'message' => 'Gagal tambah user PPPoE: ' . $e->getMessage()];
+        }
+    }
+
+    /**
      * Sinkronkan data pelanggan baru ke MikroTik berdasarkan tipe koneksi.
      * 
      * @param Pelanggan $pelanggan
@@ -603,10 +698,23 @@ class MikrotikService
             }
 
             $api = $this->makeLegacyClient();
-            $basePath = $this->getBasePathByType($tipe);
-            $payload = $this->buildUserPayloadByType($pelanggan, $tipe);
+            $payload = [
+                'name' => $pelanggan->username_mikrotik,
+                'password' => $pelanggan->password_mikrotik,
+                'disabled' => in_array(strtolower($pelanggan->status_aktif), ['nonaktif', 'locked'], true) ? 'yes' : 'no',
+            ];
 
-            $api->comm($basePath . '/add', $payload);
+            $profile = $this->resolveProfile($pelanggan);
+            if (!empty($profile)) {
+                $payload['profile'] = $profile;
+            }
+
+            if (trim($tipe) === 'PPPoE') {
+                $payload['service'] = 'pppoe';
+                $api->comm('/ppp/secret/add', $payload);
+            } else {
+                $api->comm('/ip/hotspot/user/add', $payload);
+            }
 
             return ['success' => true, 'message' => "Pelanggan {$tipe} berhasil ditambahkan ke MikroTik."];
         } catch (\Throwable $e) {
@@ -667,20 +775,49 @@ class MikrotikService
             }
 
             $api = $this->makeLegacyClient();
-            $basePath = $this->getBasePathByType($tipe);
+            $endpointBase = trim($tipe) === 'PPPoE' ? '/ppp/secret' : '/ip/hotspot/user';
 
-            $existing = $api->comm($basePath . '/print', ['?name' => $oldUsername]);
+            $existing = $api->comm($endpointBase . '/print', ['?name' => $oldUsername]);
             $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
 
             if (!$entry || !isset($entry['.id'])) {
-                $api->comm($basePath . '/add', $this->buildUserPayloadByType($pelanggan, $tipe));
+                $payload = [
+                    'name' => $pelanggan->username_mikrotik,
+                    'password' => $pelanggan->password_mikrotik,
+                    'disabled' => in_array(strtolower($pelanggan->status_aktif), ['nonaktif', 'locked'], true) ? 'yes' : 'no',
+                ];
+
+                $profile = $this->resolveProfile($pelanggan);
+                if (!empty($profile)) {
+                    $payload['profile'] = $profile;
+                }
+
+                if (trim($tipe) === 'PPPoE') {
+                    $payload['service'] = 'pppoe';
+                }
+
+                $api->comm($endpointBase . '/add', $payload);
                 return ['success' => true, 'message' => "Pelanggan {$tipe} ditambahkan ulang di MikroTik (tidak ditemukan data lama)."];
             }
 
-            $payload = $this->buildUserPayloadByType($pelanggan, $tipe);
+            $payload = [
+                'name' => $pelanggan->username_mikrotik,
+                'password' => $pelanggan->password_mikrotik,
+                'disabled' => in_array(strtolower($pelanggan->status_aktif), ['nonaktif', 'locked'], true) ? 'yes' : 'no',
+            ];
+
+            $profile = $this->resolveProfile($pelanggan);
+            if (!empty($profile)) {
+                $payload['profile'] = $profile;
+            }
+
+            if (trim($tipe) === 'PPPoE') {
+                $payload['service'] = 'pppoe';
+            }
+
             $payload['.id'] = $entry['.id'];
 
-            $api->comm($basePath . '/set', $payload);
+            $api->comm($endpointBase . '/set', $payload);
 
             return ['success' => true, 'message' => "Data pelanggan {$tipe} berhasil diperbarui di MikroTik."];
         } catch (\Throwable $e) {

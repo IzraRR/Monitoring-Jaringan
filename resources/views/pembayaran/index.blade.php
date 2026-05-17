@@ -134,20 +134,12 @@
             <div class="card-body p-3 p-md-4">
                 <div class="card-title">Rekam Pembayaran Baru</div>
 
-                <label class="form-label mb-1">Cari Pembayaran/Pelanggan</label>
-                <form action="{{ route('pembayaran.index') }}" method="GET" class="input-group mb-3 w-100 w-lg-75">
-                    <input type="text" name="q" value="{{ $search }}" class="form-control search-field" placeholder="Nama pelanggan, periode, status">
-                    <button class="btn search-btn" type="submit"><i class="bi bi-search"></i></button>
-                </form>
-
-                <div class="muted-line mb-2">
-                    <span id="client-info">Pilih pelanggan untuk melihat paket dan total tagihan</span>
-                </div>
-
-                <form action="{{ route('pembayaran.store') }}" method="POST" class="row g-3 align-items-end">
+                <form action="{{ route('pembayaran.store') }}" method="POST">
                     @csrf
-                    <div class="col-md-4">
-                        <label class="form-label mb-1">Pelanggan :</label>
+                    
+                    <!-- Dropdown Pelanggan (Full Width) -->
+                    <div class="mb-3">
+                        <label class="form-label mb-2">Cari Pelanggan (Masukan ID/Username)</label>
                         <select name="id_pelanggan" id="pelanggan-select" class="form-select" required>
                             <option value="">Pilih pelanggan</option>
                             @foreach($pelangganOptions as $pelanggan)
@@ -157,28 +149,37 @@
                             @endforeach
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label mb-1">Periode Tagihan :</label>
-                        <input type="text" name="periode_tagihan" class="form-control" value="{{ old('periode_tagihan', now()->translatedFormat('F Y')) }}" required>
+
+                    <!-- Client Info (Muted) -->
+                    <div class="mb-3">
+                        <small class="text-muted d-block" id="client-info">Pilih pelanggan untuk melihat paket dan total tagihan</small>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label mb-1">Tanggal Bayar :</label>
-                        <input type="date" name="tanggal_bayar" class="form-control" value="{{ old('tanggal_bayar', now()->toDateString()) }}" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label mb-1">Jumlah Nominal Bayar (Rp):</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-2 border-dark fw-bold">Rp</span>
-                            <input type="number" step="0.01" min="0" id="nominal-input" name="nominal" class="form-control fw-bold" value="{{ old('nominal') }}" required>
+
+                    <!-- Inline Form Row (Periode, Nominal, Button) -->
+                    <div class="row align-items-end g-2 mb-3">
+                        <!-- Periode Tagihan -->
+                        <div class="col-4">
+                            <label class="form-label mb-1">Periode Tagihan</label>
+                            <input type="text" name="periode_tagihan" class="form-control" value="{{ old('periode_tagihan', now()->translatedFormat('F Y')) }}" required>
+                        </div>
+
+                        <!-- Jumlah Nominal Bayar -->
+                        <div class="col-4">
+                            <label class="form-label mb-1">Jumlah Nominal Bayar (Rp)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-2 border-dark fw-bold">Rp</span>
+                                <input type="number" step="0.01" min="0" id="nominal-input" name="nominal" class="form-control fw-bold" value="{{ old('nominal') }}" required>
+                            </div>
+                        </div>
+
+                        <!-- Tombol Proses Pembayaran -->
+                        <div class="col-4">
+                            <button type="submit" class="btn action-btn w-100 py-2">PROSES PEMBAYARAN</button>
                         </div>
                     </div>
-                    <div class="col-md-8">
-                        <div class="muted-line">Total pemasukan bulan ini: Rp {{ number_format($rekap['bulan_ini'], 0, ',', '.') }}</div>
-                        <div class="muted-line">Total seluruh pemasukan: Rp {{ number_format($rekap['total_nominal'], 0, ',', '.') }}</div>
-                    </div>
-                    <div class="col-md-4">
-                        <button type="submit" class="btn action-btn w-100 py-2">PROSES PEMBAYARAN</button>
-                    </div>
+
+                    <!-- Tanggal Bayar (Hidden) -->
+                    <input type="hidden" name="tanggal_bayar" value="{{ old('tanggal_bayar', now()->toDateString()) }}">
                 </form>
             </div>
         </div>
@@ -186,16 +187,20 @@
 
     <div class="col-lg-4">
         <div class="card payment-card h-100">
-            <div class="card-body p-3 p-md-4 d-flex flex-column justify-content-between">
-                <div>
-                    <div class="card-title">Kontrol Notifikasi & Notifikasi (WA)</div>
-                    <form action="{{ route('pembayaran.send-notifications') }}" method="POST" class="mb-3">
-                        @csrf
-                        <button type="submit" class="btn secondary-btn w-100 py-2">KIRIM NOTIFIKASI TAGIHAN</button>
-                    </form>
-                    <div class="muted-line">Generate & Kirim via WhatsApp</div>
-                    <div class="muted-line">Log log of status</div>
-                </div>
+            <div class="card-body p-3 p-md-4">
+                <div class="card-title">Kontrol Notifikasi (WA)</div>
+                
+                <!-- Tombol Kirim Notifikasi -->
+                <form action="{{ route('pembayaran.send-notifications') }}" method="POST" class="mb-3">
+                    @csrf
+                    <button type="submit" class="btn secondary-btn w-100 py-2">KIRIM NOTIFIKASI TAGIHAN</button>
+                </form>
+
+                <!-- Teks Statis -->
+                <small class="text-muted d-block mt-2">Generate & Kirim via WhatsApp</small>
+
+                <!-- Log Status Dinamis -->
+                <small class="text-success fw-bold d-block mt-2">Log of status: {{ session('success') ?? session('error') ?? 'Menunggu instruksi...' }}</small>
             </div>
         </div>
     </div>
@@ -227,12 +232,9 @@
                         <td>{{ number_format($item->nominal, 0, ',', '.') }}</td>
                         <td>{{ $item->status_notifikasi }}</td>
                         <td>
-                            <a href="{{ route('pembayaran.edit', $item) }}" class="text-dark fw-semibold text-decoration-none me-2">Edit</a>
-                            <form action="{{ route('pembayaran.destroy', $item) }}" method="POST" class="d-inline" onsubmit="return confirm('Hapus data pembayaran ini?')">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="btn btn-link p-0 text-danger fw-semibold text-decoration-none">Hapus</button>
-                            </form>
+                            <a href="{{ route('pembayaran.struk', $item->id_pembayaran) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Cetak Struk Pembayaran">
+                                <i class="bi bi-printer"></i> Cetak PDF
+                            </a>
                         </td>
                     </tr>
                 @empty

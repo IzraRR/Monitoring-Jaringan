@@ -4,6 +4,26 @@
 @section('page_heading', 'Dashboard | Monitoring Bandwidth Real-Time')
 
 @section('content')
+@php
+    $mikrotik = $mikrotik ?? [
+        'host' => config('services.mikrotik.host', '-'),
+        'identity' => null,
+        'uptime' => null,
+        'cpu_load' => null,
+    ];
+    $realtimeStats = $realtimeStats ?? [
+        'status' => 'offline',
+        'connected' => false,
+        'identity' => null,
+        'uptime' => 'Offline',
+        'cpu_load' => null,
+        'hotspot_active' => 0,
+        'pppoe_active' => 0,
+        'interface_name' => '-',
+        'rx_bps' => 0,
+        'tx_bps' => 0,
+    ];
+@endphp
 <div class="row mb-4">
     <div class="col-md-3">
         <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
@@ -81,24 +101,16 @@
                 <p class="text-secondary mb-1">Status Koneksi MikroTik</p>
                 <div class="d-flex align-items-center mb-2">
                     <i id="mikrotik-status-dot" class="bi bi-circle-fill {{ $realtimeStats['connected'] ? 'text-success' : 'text-danger' }} fs-6 me-2"></i>
-                    <span id="mikrotik-status-text" class="fw-bold text-dark">{{ $realtimeStats['connected'] ? 'TERHUBUNG' : 'TIDAK TERHUBUNG' }}</span>
+                    <span id="mikrotik-status-text" class="fw-bold text-dark">{{ $realtimeStats['connected'] ? 'TERHUBUNG' : 'OFFLINE' }}</span>
                 </div>
                 <small class="text-muted d-block">Host: {{ $mikrotik['host'] !== '' ? $mikrotik['host'] : '-' }}</small>
                 <small class="text-muted d-block">Identity: <span id="mikrotik-identity">{{ $realtimeStats['identity'] ?? $mikrotik['identity'] ?? '-' }}</span></small>
-                <small class="text-muted d-block">Uptime: <span id="mikrotik-uptime">{{ $realtimeStats['uptime'] ?? $mikrotik['uptime'] ?? '-' }}</span></small>
+                <small class="text-muted d-block">Uptime: <span id="mikrotik-uptime">{{ $realtimeStats['uptime'] ?? $mikrotik['uptime'] ?? 'Offline' }}</span></small>
                 <small class="text-muted d-block mb-2">CPU Load: <span id="mikrotik-cpu-load">{{ $realtimeStats['cpu_load'] !== null ? $realtimeStats['cpu_load'] . '%' : ($mikrotik['cpu_load'] !== null ? $mikrotik['cpu_load'] . '%' : '-') }}</span></small>
                 <small class="text-muted d-block">Hotspot Aktif: <span id="mikrotik-hotspot-active">{{ number_format($realtimeStats['hotspot_active'] ?? 0) }}</span></small>
                 <small class="text-muted d-block">PPPoE Aktif: <span id="mikrotik-pppoe-active">{{ number_format($realtimeStats['pppoe_active'] ?? 0) }}</span></small>
                 <small class="text-muted d-block mb-2">Interface: <span id="mikrotik-interface-name">{{ $realtimeStats['interface_name'] ?? '-' }}</span></small>
-                @if (!$mikrotik['connected'] && $mikrotik['error'])
-                    <small class="text-danger d-block">{{ $mikrotik['error'] }}</small>
-                    <small class="text-muted d-block mt-1">
-                        Password kosong diperbolehkan jika akun RouterOS memang tidak memakai password.
-                    </small>
-                    <small class="text-muted d-block mt-1">
-                        Pastikan layanan API RouterOS aktif (port 8728/8729) dan user punya hak akses yang cukup.
-                    </small>
-                @endif
+                <small id="mikrotik-offline-message" class="text-danger d-block {{ ($realtimeStats['status'] ?? '') === 'offline' ? '' : 'd-none' }}">Koneksi ke Router terputus.</small>
 
                 <hr>
 
@@ -193,17 +205,19 @@
     }
 
     function updateRealtimeCards(data) {
+        const isOffline = data.status === 'offline';
         const connected = !!data.connected;
         const statusDot = document.getElementById('mikrotik-status-dot');
         const statusText = document.getElementById('mikrotik-status-text');
+        const offlineMessage = document.getElementById('mikrotik-offline-message');
 
         if (statusDot) {
             statusDot.classList.remove('text-success', 'text-danger');
-            statusDot.classList.add(connected ? 'text-success' : 'text-danger');
+            statusDot.classList.add(connected && !isOffline ? 'text-success' : 'text-danger');
         }
 
         if (statusText) {
-            statusText.textContent = connected ? 'TERHUBUNG' : 'TIDAK TERHUBUNG';
+            statusText.textContent = connected && !isOffline ? 'TERHUBUNG' : 'OFFLINE';
         }
 
         const identityEl = document.getElementById('mikrotik-identity');
@@ -213,14 +227,17 @@
         const pppoeEl = document.getElementById('mikrotik-pppoe-active');
         const interfaceEl = document.getElementById('mikrotik-interface-name');
 
-        if (identityEl) identityEl.textContent = data.identity ?? '-';
-        if (uptimeEl) uptimeEl.textContent = data.uptime ?? '-';
-        if (cpuEl) cpuEl.textContent = data.cpu_load !== null && data.cpu_load !== undefined ? `${data.cpu_load}%` : '-';
-        if (hotspotEl) hotspotEl.textContent = Number(data.hotspot_active ?? 0).toLocaleString('id-ID');
-        if (pppoeEl) pppoeEl.textContent = Number(data.pppoe_active ?? 0).toLocaleString('id-ID');
-        if (interfaceEl) interfaceEl.textContent = data.interface_name ?? '-';
+        if (identityEl) identityEl.textContent = isOffline ? 'Offline' : (data.identity ?? '-');
+        if (uptimeEl) uptimeEl.textContent = isOffline ? 'Offline' : (data.uptime ?? '-');
+        if (cpuEl) cpuEl.textContent = isOffline ? 'Offline' : (data.cpu_load !== null && data.cpu_load !== undefined ? `${data.cpu_load}%` : '-');
+        if (hotspotEl) hotspotEl.textContent = isOffline ? '0' : Number(data.hotspot_active ?? 0).toLocaleString('id-ID');
+        if (pppoeEl) pppoeEl.textContent = isOffline ? '0' : Number(data.pppoe_active ?? 0).toLocaleString('id-ID');
+        if (interfaceEl) interfaceEl.textContent = isOffline ? '-' : (data.interface_name ?? '-');
+        if (offlineMessage) offlineMessage.classList.toggle('d-none', !isOffline);
 
-        updateTrafficChart(data);
+        if (!isOffline) {
+            updateTrafficChart(data);
+        }
     }
 
     async function loadRealtimeStats() {
@@ -235,6 +252,18 @@
             updateRealtimeCards(payload);
         } catch (error) {
             console.error('Gagal memuat statistik realtime dashboard:', error);
+            updateRealtimeCards({
+                status: 'offline',
+                connected: false,
+                identity: 'Offline',
+                uptime: 'Offline',
+                cpu_load: null,
+                hotspot_active: 0,
+                pppoe_active: 0,
+                interface_name: '-',
+                rx_bps: 0,
+                tx_bps: 0,
+            });
         }
     }
 

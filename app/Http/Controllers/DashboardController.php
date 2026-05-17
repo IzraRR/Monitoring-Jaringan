@@ -7,10 +7,11 @@ use App\Models\Pelanggan;
 use App\Models\Pembayaran;
 use App\Services\MikrotikService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
-    public function index(MikrotikService $mikrotikService)
+    public function index()
     {
         $today = now()->toDateString();
 
@@ -36,16 +37,11 @@ class DashboardController extends Controller
             ->where('is_anomali', true)
             ->count();
 
-        $mikrotik = $mikrotikService->getSystemSummary();
-        $realtimeStats = $mikrotikService->getRealtimeStats();
-
         return view('dashboard', [
             'stats' => $stats,
             'trafficLabels' => $trafficSeries->pluck('tanggal')->map(fn ($value) => date('d M', strtotime($value)))->values(),
             'trafficData' => $trafficSeries->pluck('usage_mb')->map(fn ($value) => round((float) $value, 2))->values(),
             'anomaliHariIni' => $anomaliHariIni,
-            'mikrotik' => $mikrotik,
-            'realtimeStats' => $realtimeStats,
             'recentPayments' => Pembayaran::with('pelanggan')
                 ->latest('tanggal_bayar')
                 ->limit(5)
@@ -55,6 +51,26 @@ class DashboardController extends Controller
 
     public function getRealtimeStats(MikrotikService $mikrotikService): JsonResponse
     {
-        return response()->json($mikrotikService->getRealtimeStats());
+        try {
+            return response()->json($mikrotikService->getRealtimeStats());
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik realtime stats unavailable', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'status' => 'offline',
+                'message' => 'Router tidak dapat dihubungi.',
+                'connected' => false,
+                'identity' => null,
+                'uptime' => 'Offline',
+                'cpu_load' => null,
+                'hotspot_active' => 0,
+                'pppoe_active' => 0,
+                'interface_name' => null,
+                'rx_bps' => 0,
+                'tx_bps' => 0,
+            ]);
+        }
     }
 }

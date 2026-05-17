@@ -48,12 +48,12 @@
             <a href="{{ route('pelanggan.create') }}" class="btn fw-bold px-4 me-2" style="background-color: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1;">
                 + DAFTAR PELANGGAN
             </a>
-            <form action="{{ route('pelanggan.sync') }}" method="POST" class="d-inline">
-                @csrf
-                <button type="submit" class="btn fw-bold px-4 text-white" style="background-color: #38bdf8; border: 1px solid #0284c7;">
-                    <i class="bi bi-arrow-repeat me-1"></i> SINKRONISASI KE MIKROTIK
-                </button>
-            </form>
+                <form action="{{ route('pelanggan.sync') }}" method="POST" class="d-inline form-sync">
+                    @csrf
+                    <button type="submit" class="btn fw-bold px-4 text-white" style="background-color: #38bdf8; border: 1px solid #0284c7;">
+                        <i class="bi bi-arrow-repeat me-1"></i> SINKRONISASI KE MIKROTIK
+                    </button>
+                </form>
         </div>
     </div>
 
@@ -88,19 +88,35 @@
                                 </span>
                             </td>
                             <td>
-                                <a href="{{ route('pelanggan.edit', $item) }}" class="text-warning me-2" title="Edit"><i class="bi bi-pencil-fill"></i></a>
-                                <form action="{{ route('pelanggan.destroy', $item) }}" method="POST" class="d-inline" onsubmit="return confirm('Hapus pelanggan ini?')">
+                                <!-- Tombol 1: Edit -->
+                                <a href="{{ route('pelanggan.edit', $item) }}" class="btn btn-sm btn-outline-primary me-1" title="Edit Pelanggan">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
+                                
+                                <!-- Tombol 2: Hapus (Form DELETE) -->
+                                <form action="{{ route('pelanggan.destroy', $item) }}" method="POST" class="d-inline form-delete">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="btn btn-link p-0 text-secondary" title="Hapus"><i class="bi bi-trash-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger me-1" title="Hapus Pelanggan">
+                                        <i class="bi bi-trash-fill"></i>
+                                    </button>
                                 </form>
-                                <form action="{{ route('pelanggan.toggle-lock', $item) }}" method="POST" class="d-inline" onsubmit="return confirm('Ubah status lock user ini?')">
+                                
+                                <!-- Tombol 3: Lock/Unlock (Form POST) -->
+                                <form action="{{ route('pelanggan.toggle-lock', $item) }}" method="POST" class="d-inline form-lock">
                                     @csrf
-                                    <button type="submit" class="btn btn-link p-0 text-warning ms-2" title="Kunci/Buka Kunci"><i class="bi bi-lock-fill"></i></button>
+                                    @php $isLocked = strtolower((string) $item->status_aktif) === 'locked'; @endphp
+                                    <button type="submit" class="btn btn-sm btn-outline-warning me-1" title="{{ $isLocked ? 'Buka Kunci Pelanggan' : 'Kunci Pelanggan' }}">
+                                        <i class="bi bi-{{ $isLocked ? 'unlock-fill' : 'lock-fill' }}"></i>
+                                    </button>
                                 </form>
-                                <form action="{{ route('pelanggan.disconnect', $item) }}" method="POST" class="d-inline" onsubmit="return confirm('Nonaktifkan dan putus sesi aktif user ini?')">
+                                
+                                <!-- Tombol 4: Kick/Disconnect (Form POST) -->
+                                <form action="{{ route('pelanggan.disconnect', $item) }}" method="POST" class="d-inline form-kick">
                                     @csrf
-                                    <button type="submit" class="btn btn-link p-0 text-dark ms-2" title="Nonaktifkan"><i class="bi bi-x-lg fw-bold"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Putus Sesi (Kick)">
+                                        <i class="bi bi-x-circle-fill"></i>
+                                    </button>
                                 </form>
                             </td>
                         </tr>
@@ -119,4 +135,110 @@
         <div>{{ $pelanggan->links() }}</div>
     </div>
 </div>
+
+<!-- CDN SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    // Konfirmasi Hapus dengan SweetAlert2
+    document.querySelectorAll('.form-delete').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            Swal.fire({
+                title: '⚠️ PERINGATAN BUKAN MAIN!',
+                html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MENGHAPUS</strong> pelanggan ini secara <strong>PERMANEN</strong>?<br><br>Akun siswa di <strong>MikroTik</strong> juga akan ikut <strong>MUSNAH</strong>.<br><br><span class="text-danger fw-bold">Tindakan ini TIDAK bisa dibatalkan!</span>',
+                icon: 'warning',
+                iconColor: '#dc3545',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Hapus Sekarang!',
+                cancelButtonText: 'Batalkan',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+
+    // Konfirmasi Lock/Unlock dengan SweetAlert2
+    document.querySelectorAll('.form-lock').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const isLocked = this.querySelector('.btn').title.includes('Buka Kunci');
+            const aksiTeks = isLocked ? 'DIBUKA KUNCI' : 'DIKUNCI';
+            
+            Swal.fire({
+                title: 'Ubah Status Pelanggan',
+                html: `Apakah Anda <strong>YAKIN</strong> ingin <strong>MENGUBAH STATUS</strong> (Lock / Aktif) untuk pelanggan ini?<br><br>User akan <strong>${aksiTeks}</strong>.`,
+                icon: 'question',
+                iconColor: '#ffc107',
+                showCancelButton: true,
+                confirmButtonColor: '#ffc107',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Ubah Status!',
+                cancelButtonText: 'Batalkan',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+
+    // Konfirmasi Kick/Disconnect dengan SweetAlert2
+    document.querySelectorAll('.form-kick').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            Swal.fire({
+                title: 'Putus Sesi Pelanggan',
+                html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MEMUTUS PAKSA (Kick)</strong> koneksi siswa ini?<br><br>Siswa akan <strong>ter-disconnect</strong> dari internet <strong>sesaat</strong>.',
+                icon: 'warning',
+                iconColor: '#0d6efd',
+                showCancelButton: true,
+                confirmButtonColor: '#0d6efd',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Kick Sekarang!',
+                cancelButtonText: 'Batalkan',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+
+        // Konfirmasi Sinkronisasi Massal dengan SweetAlert2
+        document.querySelectorAll('.form-sync').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    title: '🔄 SINKRONISASI MASSAL',
+                    html: 'Proses ini akan <strong>mencocokkan seluruh data</strong> database lokal dengan router <strong>MikroTik</strong>.<br><br>Waktu tunggu: beberapa detik hingga menit tergantung jumlah pelanggan.<br><br>Lanjutkan?',
+                    icon: 'question',
+                    iconColor: '#38bdf8',
+                    showCancelButton: true,
+                    confirmButtonColor: '#38bdf8',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Ya, Sinkronisasi Sekarang!',
+                    cancelButtonText: 'Batalkan',
+                    reverseButtons: true,
+                    didOpen: (modal) => {
+                        // Store the button reference for disabling later
+                        modal.dataset.confirmBtn = Swal.getConfirmButton().id;
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Disable button and show loading
+                        Swal.showLoading();
+                        form.submit();
+                    }
+                });
+            });
+        });
+</script>
 @endsection

@@ -8,6 +8,8 @@ use App\Services\MikrotikService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Artisan;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -256,16 +258,39 @@ class PembayaranController extends Controller
 
     public function sendNotifications(): RedirectResponse
     {
-        $updated = Pembayaran::where('status_notifikasi', 'Pending')->update([
-            'status_notifikasi' => 'Send',
-            'updated_at' => now(),
-        ]);
+        try {
+            // Jalankan Artisan command yang sudah teruji
+            Artisan::call('app:kirim-tagihan-wa');
+            $output = Artisan::output();
 
-        return redirect()->route('pembayaran.index')->with(
-            'success',
-            $updated > 0
-                ? "Notifikasi tagihan berhasil diproses untuk {$updated} transaksi."
-                : 'Tidak ada data notifikasi Pending untuk dikirim.'
-        );
+            Log::info('Manual trigger: Kirim notifikasi tagihan via WhatsApp', [
+                'triggered_at' => now(),
+                'output' => $output,
+            ]);
+
+            return redirect()->route('pembayaran.index')->with(
+                'success',
+                'Proses sinkronisasi tagihan selesai dijalankan. Cek log untuk detail.'
+            );
+        } catch (\Exception $e) {
+            Log::error('Error saat menjalankan kirim tagihan command: ' . $e->getMessage());
+
+            return redirect()->route('pembayaran.index')->with(
+                'danger',
+                'Terjadi error saat menjalankan proses: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * Cetak Struk/Kwitansi PDF per transaksi pembayaran
+     */
+    public function cetakStruk($id)
+    {
+        $pembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
+            ->findOrFail($id);
+
+        $pdf = Pdf::loadView('pembayaran.struk', compact('pembayaran'));
+        return $pdf->stream('Struk_Pembayaran_' . $pembayaran->id_pembayaran . '.pdf');
     }
 }

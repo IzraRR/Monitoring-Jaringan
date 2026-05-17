@@ -37,6 +37,7 @@ Route::middleware('admin.auth')->group(function () {
     Route::resource('bandwidth', BandwidthController::class)->except(['show']);
     Route::resource('pembayaran', PembayaranController::class)->except(['show']);
     Route::post('/pembayaran/notifikasi/kirim', [PembayaranController::class, 'sendNotifications'])->name('pembayaran.send-notifications');
+    Route::get('/pembayaran/{id}/struk', [PembayaranController::class, 'cetakStruk'])->name('pembayaran.struk');
     Route::get('/log', [LogAktivitasController::class, 'index'])->name('log.index');
     Route::get('/laporan', [LaporanController::class, 'index'])->name('laporan.index');
     Route::get('/laporan/cetak', [LaporanController::class, 'cetakPdf'])->name('laporan.cetak');

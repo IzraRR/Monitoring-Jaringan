@@ -6,6 +6,7 @@ use App\Models\Pelanggan;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class KirimTagihanWA extends Command
@@ -29,32 +30,44 @@ class KirimTagihanWA extends Command
         $this->line('🔄 Mencari pelanggan dengan masa aktif mendekati batas...');
 
         try {
-            // Tentukan range tanggal untuk H-3 atau sudah lewat masa aktif (belum suspend)
-            $today = Carbon::now()->toDateString();
-            $threeDaysFromNow = Carbon::now()->addDays(3)->toDateString();
+            // Tentukan range tanggal: hari ini sampai H+3 (3 hari ke depan)
+            // Gunakan Carbon::today() agar hanya membandingkan tanggal (tanpa waktu/jam)
+            $tanggalMulai = Carbon::today()->toDateString();
+            $tanggalAkhir = Carbon::today()->addDays(3)->toDateString();
 
-            // Query pelanggan aktif dengan masa aktif H-3 atau lebih awal
+            $this->line("🔍 Memeriksa pelanggan dengan masa aktif antara {$tanggalMulai} sampai {$tanggalAkhir}...");
+
+            // Query pelanggan aktif dengan masa aktif di antara hari ini sampai 3 hari ke depan
             $pelangganList = Pelanggan::with('paket')
                 ->where('status_aktif', 'Aktif')
-                ->whereDate('masa_aktif', '<=', $threeDaysFromNow)
-                ->whereDate('masa_aktif', '>=', $today)
+                ->whereBetween('masa_aktif', [$tanggalMulai, $tanggalAkhir])
                 ->get();
 
             if ($pelangganList->isEmpty()) {
-                Log::info('Tidak ada pelanggan dengan masa aktif H-3. Cron selesai.');
-                $this->info('✅ Tidak ada pelanggan yang memerlukan notifikasi saat ini.');
+                Log::info("Tidak ada pelanggan yang jatuh tempo antara {$tanggalMulai} sampai {$tanggalAkhir}.");
+                $this->info("✅ Tidak ada pelanggan yang memerlukan notifikasi dalam rentang ini.");
                 return self::SUCCESS;
             }
 
-            $this->line("📋 Ditemukan {$pelangganList->count()} pelanggan untuk dikirim notifikasi.");
-            Log::info("Ditemukan {$pelangganList->count()} pelanggan untuk notifikasi tagihan.");
+            $this->line("📋 Ditemukan {$pelangganList->count()} pelanggan untuk diperiksa.");
+            Log::info("Ditemukan {$pelangganList->count()} pelanggan untuk notifikasi tagihan dalam rentang {$tanggalMulai} sampai {$tanggalAkhir}.");
 
             $successCount = 0;
             $failureCount = 0;
+            $skippedCount = 0;
 
             // Looping setiap pelanggan dan kirim notifikasi
             foreach ($pelangganList as $pelanggan) {
                 try {
+                    // Cek cache untuk mencegah spam: jika sudah pernah dikirim dalam periode ini, skip
+                    $cacheKey = 'wa_tagihan_sent_' . $pelanggan->id_pelanggan;
+                    if (Cache::has($cacheKey)) {
+                        Log::info("Pelanggan ID {$pelanggan->id_pelanggan} ({$pelanggan->nama_pelanggan}) sudah menerima notifikasi sebelumnya, skip.");
+                        $this->line("⏭️  Pelanggan {$pelanggan->nama_pelanggan} sudah dikirimi pesan, skip (cache ada).");
+                        $skippedCount++;
+                        continue;
+                    }
+
                     // Validasi data pelanggan
                     if (empty($pelanggan->no_hp)) {
                         Log::warning("Pelanggan ID {$pelanggan->id_pelanggan} ({$pelanggan->nama_pelanggan}) tidak punya nomor HP.");
@@ -87,15 +100,22 @@ class KirimTagihanWA extends Command
                     $pesan = "Peringatan Tagihan: Masa aktif paket {$pelanggan->paket->nama_paket} Anda akan habis pada {$masaAktifFormat}. Tagihan: Rp {$hargaFormat}. Silakan lakukan pembayaran segera untuk menjaga kelancaran layanan Anda.";
 
                     // Kirim via WhatsApp Gateway (Fonnte)
-                    $this->sendWhatsAppNotification(
+                    $sendResult = $this->sendWhatsAppNotification(
                         $phoneNumber,
                         $pesan,
                         $pelanggan->id_pelanggan,
                         $pelanggan->nama_pelanggan
                     );
 
-                    $successCount++;
-                    $this->line("✅ Notifikasi terkirim ke {$pelanggan->nama_pelanggan}");
+                    if ($sendResult['success']) {
+                        // Set cache untuk 4 hari ke depan agar tidak terkirim lagi dalam rentang ini
+                        Cache::put($cacheKey, true, now()->addDays(4));
+                        $successCount++;
+                        $this->line("✅ Notifikasi terkirim ke {$pelanggan->nama_pelanggan}");
+                    } else {
+                        $this->error("❌ Gagal kirim ke {$pelanggan->nama_pelanggan} ({$pelanggan->no_hp}): {$sendResult['error']}");
+                        $failureCount++;
+                    }
 
                 } catch (\Exception $e) {
                     Log::error("Error mengirim notifikasi untuk pelanggan ID {$pelanggan->id_pelanggan}: " . $e->getMessage());
@@ -106,11 +126,13 @@ class KirimTagihanWA extends Command
 
             // Summary hasil
             Log::info("=== SELESAI: Kirim Tagihan WhatsApp ===");
-            Log::info("Berhasil: {$successCount}, Gagal: {$failureCount}");
+            Log::info("Range: {$tanggalMulai} sampai {$tanggalAkhir} | Berhasil: {$successCount}, Gagal: {$failureCount}, Di-skip (cache): {$skippedCount}");
 
             $this->line("\n📊 RINGKASAN:");
-            $this->line("   ✅ Berhasil: {$successCount}");
+            $this->line("   📅 Range: {$tanggalMulai} sampai {$tanggalAkhir}");
+            $this->line("   ✅ Berhasil dikirim: {$successCount}");
             $this->line("   ❌ Gagal: {$failureCount}");
+            $this->line("   ⏭️  Di-skip (sudah dikirim): {$skippedCount}");
 
             return self::SUCCESS;
 
@@ -147,46 +169,74 @@ class KirimTagihanWA extends Command
 
     /**
      * Kirim notifikasi via WhatsApp Gateway (Fonnte API)
+     * Mengembalikan array dengan format ['success' => bool, 'error' => string]
      */
-    private function sendWhatsAppNotification(string $phoneNumber, string $pesan, int $idPelanggan, string $namaPelanggan): void
+    private function sendWhatsAppNotification(string $phoneNumber, string $pesan, int $idPelanggan, string $namaPelanggan): array
     {
         // Ambil konfigurasi WhatsApp dari services.php
         $whatsappConfig = config('services.whatsapp');
 
         // Validasi konfigurasi
         if (!$whatsappConfig || !$whatsappConfig['enabled']) {
-            Log::warning("WhatsApp Gateway tidak diaktifkan untuk pelanggan ID {$idPelanggan}.");
-            return;
+            $msg = "WhatsApp Gateway tidak diaktifkan. Aktifkan di config('services.whatsapp.enabled')";
+            Log::warning("Pelanggan ID {$idPelanggan}: {$msg}");
+            return ['success' => false, 'error' => $msg];
         }
 
         if (empty($whatsappConfig['token'])) {
-            Log::error("WhatsApp API Token tidak dikonfigurasi untuk pelanggan ID {$idPelanggan}.");
-            return;
+            $msg = "WhatsApp API Token tidak dikonfigurasi. Set di .env: WHATSAPP_TOKEN dan WHATSAPP_URL";
+            Log::error("Pelanggan ID {$idPelanggan}: {$msg}");
+            return ['success' => false, 'error' => $msg];
+        }
+
+        if (empty($whatsappConfig['url'])) {
+            $msg = "WhatsApp API URL tidak dikonfigurasi. Set di .env: WHATSAPP_URL";
+            Log::error("Pelanggan ID {$idPelanggan}: {$msg}");
+            return ['success' => false, 'error' => $msg];
         }
 
         try {
             // Kirim request ke Fonnte API dengan format form-data
+            // PENTING: Fonnte hanya menerima token murni di header (bukan "Bearer " prefix)
             $response = Http::asForm()
+                ->withHeaders([
+                    'Authorization' => $whatsappConfig['token'],
+                    'Accept' => 'application/json',
+                ])
                 ->timeout(15)
                 ->post($whatsappConfig['url'], [
                     'target' => $phoneNumber,
                     'message' => $pesan,
                     'countryCode' => $whatsappConfig['country_code'] ?? '62',
-                ])
-                ->throw() // Lempar exception jika HTTP error
-                ->json();
+                ]);
 
-            // Cek response status
-            if (isset($response['status']) && $response['status'] == 'success') {
+            // Cek status HTTP response
+            if (!$response->successful()) {
+                $errorMsg = "HTTP Error {$response->status()}: " . $response->body();
+                Log::error("WhatsApp HTTP Error untuk pelanggan ID {$idPelanggan}: {$errorMsg}");
+                return ['success' => false, 'error' => $errorMsg];
+            }
+
+            $responseData = $response->json();
+
+            // Cek response status dari API
+            if (isset($responseData['status']) && $responseData['status'] == 'success') {
                 Log::info("WhatsApp notifikasi terkirim ke pelanggan ID {$idPelanggan} ({$namaPelanggan}), target: {$phoneNumber}");
+                return ['success' => true, 'error' => ''];
             } else {
-                Log::warning("WhatsApp notifikasi gagal untuk pelanggan ID {$idPelanggan}, response: " . json_encode($response));
+                $errorMsg = "API Response Error: " . json_encode($responseData);
+                Log::warning("WhatsApp notifikasi gagal untuk pelanggan ID {$idPelanggan}: {$errorMsg}");
+                return ['success' => false, 'error' => $errorMsg];
             }
 
         } catch (\Illuminate\Http\Client\RequestException $e) {
-            Log::error("HTTP Request Error saat mengirim WA ke {$phoneNumber} (Pelanggan ID {$idPelanggan}): " . $e->getMessage());
+            $errorMsg = "HTTP Request Exception: " . $e->getMessage();
+            Log::error("HTTP Exception saat mengirim WA ke {$phoneNumber} (Pelanggan ID {$idPelanggan}): {$errorMsg}");
+            return ['success' => false, 'error' => $errorMsg];
         } catch (\Exception $e) {
-            Log::error("Error saat mengirim WhatsApp ke pelanggan ID {$idPelanggan}: " . $e->getMessage());
+            $errorMsg = "Unexpected Error: " . $e->getMessage();
+            Log::error("Error saat mengirim WhatsApp ke pelanggan ID {$idPelanggan}: {$errorMsg}");
+            return ['success' => false, 'error' => $errorMsg];
         }
     }
 }

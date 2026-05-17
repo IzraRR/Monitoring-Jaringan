@@ -78,13 +78,14 @@ class PelangganController extends Controller
 
         try {
             $pelanggan = Pelanggan::create($validated);
-            $pelanggan->loadMissing('paket');
-            
-            // Deteksi tipe koneksi dari nama paket secara otomatis
-            $tipe = $this->detectTypeFromPaket($pelanggan);
-            
-            // Sinkronkan ke MikroTik dengan tipe yang terdeteksi
-            $sync = $mikrotikService->syncPelangganCreatedByType($pelanggan, $tipe);
+            $pelanggan->load('paket');
+
+            $namaPaket = strtolower(trim($pelanggan->paket->nama_paket ?? ''));
+            if (stripos($namaPaket, 'pppoe') !== false) {
+                $sync = $mikrotikService->tambahUserPPPoE($pelanggan);
+            } else {
+                $sync = $mikrotikService->tambahUserHotspot($pelanggan);
+            }
 
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil ditambahkan.');
             if (!$sync['success']) {
@@ -121,12 +122,15 @@ class PelangganController extends Controller
             $oldUsername = $pelanggan->username_mikrotik;
             $pelanggan->update($validated);
             $pelanggan->refresh();
-            
-            // Deteksi tipe koneksi dari nama paket secara otomatis
-            $tipe = $this->detectTypeFromPaket($pelanggan);
-            
-            // Sinkronkan update ke MikroTik dengan tipe yang terdeteksi
-            $sync = $mikrotikService->syncPelangganUpdatedByType($pelanggan, $oldUsername, $tipe);
+
+            $pelanggan->load('paket');
+
+            $tipePaket = 'Hotspot';
+            if ($pelanggan->paket && stripos($pelanggan->paket->nama_paket, 'pppoe') !== false) {
+                $tipePaket = 'PPPoE';
+            }
+
+            $sync = $mikrotikService->syncPelangganUpdatedByType($pelanggan, $oldUsername, $tipePaket);
 
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil diperbarui.');
             if (!$sync['success']) {
@@ -165,10 +169,38 @@ class PelangganController extends Controller
 
     public function syncMikrotik(MikrotikService $mikrotikService): RedirectResponse
     {
-        $result = $mikrotikService->syncAllPelanggan();
-        $flashKey = $result['success'] ? 'success' : 'warning';
+        $pelangganList = Pelanggan::with('paket')->get();
+        $berhasil = 0;
+        $gagal = 0;
 
-        return redirect()->route('pelanggan.index')->with($flashKey, $result['message']);
+        foreach ($pelangganList as $p) {
+            try {
+                $namaPaket = strtolower(trim($p->paket->nama_paket ?? ''));
+                
+                \Log::info("SYNC MIKROTIK -> User: {$p->username_mikrotik} | Paket: {$namaPaket}");
+
+                if (stripos($namaPaket, 'pppoe') !== false) {
+                    $sync = $mikrotikService->tambahUserPPPoE($p);
+                } else {
+                    $sync = $mikrotikService->tambahUserHotspot($p);
+                }
+
+                if ($sync['success']) {
+                    $berhasil++;
+                } else {
+                    \Log::error("GAGAL SYNC User {$p->username_mikrotik}: " . ($sync['message'] ?? 'Unknown error'));
+                    $gagal++;
+                }
+            } catch (\Throwable $e) {
+                \Log::error("GAGAL SYNC User {$p->username_mikrotik}: " . $e->getMessage());
+                $gagal++;
+            }
+        }
+
+        return redirect()->route('pelanggan.index')->with(
+            $gagal === 0 ? 'success' : 'warning',
+            "Sinkronisasi selesai! Berhasil: {$berhasil}, Gagal: {$gagal}."
+        );
     }
 
     public function toggleLock(Pelanggan $pelanggan, MikrotikService $mikrotikService): RedirectResponse
@@ -206,19 +238,13 @@ class PelangganController extends Controller
             // Deteksi tipe koneksi dari nama paket
             $tipe = $this->detectTypeFromPaket($pelanggan);
             
-            // Putus sesi aktif dengan tipe koneksi yang terdeteksi
+            // HANYA putus sesi aktif di MikroTik (tidak ubah status DB)
             $syncDisconnect = $mikrotikService->disconnectActiveSessionByType($pelanggan, $tipe);
 
-            // Update status menjadi nonaktif dan disable user di MikroTik
-            $pelanggan->update(['status_aktif' => 'Nonaktif']);
-            $syncDisable = $mikrotikService->setPelangganStateByType($pelanggan->fresh(), false, $tipe);
-
-            $redirect = redirect()->route('pelanggan.index')->with('success', 'User berhasil dinonaktifkan dan sesi aktif diputus.');
+            $redirect = redirect()->route('pelanggan.index')->with('success', 'Sesi pelanggan berhasil diputus paksa (Kick).');
 
             if (!$syncDisconnect['success']) {
                 $redirect->with('warning', $syncDisconnect['message']);
-            } elseif (!$syncDisable['success']) {
-                $redirect->with('warning', $syncDisable['message']);
             }
 
             return $redirect;
