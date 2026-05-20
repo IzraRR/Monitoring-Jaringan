@@ -104,7 +104,7 @@
             <div class="card-body p-3 p-md-4">
                 <div class="card-title">Rekam Pembayaran Baru</div>
 
-                <form action="{{ route('pembayaran.store') }}" method="POST">
+                <form id="formPembayaran" action="{{ route('pembayaran.store') }}" method="POST">
                     @csrf
                     <div class="mb-3">
                         <select name="id_pelanggan" id="pelanggan-select" class="form-select" required>
@@ -134,7 +134,7 @@
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <button type="submit" class="btn btn-dark w-100 fw-bold py-2">PROSES PEMBAYARAN</button>
+                            <button type="submit" id="btnSubmitPembayaran" class="btn btn-dark w-100 fw-bold py-2">PROSES PEMBAYARAN</button>
                         </div>
                     </div>
                 </form>
@@ -373,8 +373,14 @@
         }
 
         if (paymentForm && nominalInput) {
+            const btnSubmitPembayaran = document.getElementById('btnSubmitPembayaran');
             paymentForm.addEventListener('submit', function () {
                 nominalInput.value = extractNumericValue(nominalInput.value);
+
+                if (btnSubmitPembayaran) {
+                    btnSubmitPembayaran.disabled = true;
+                    btnSubmitPembayaran.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Memproses...';
+                }
             });
         }
 

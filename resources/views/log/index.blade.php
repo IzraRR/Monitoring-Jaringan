@@ -55,26 +55,43 @@
         <div class="table-responsive">
             <table class="table table-bordered table-hover mb-0 text-center align-middle" style="border-color: #475569;">
                 <thead style="background-color: #cbd5e1; color: black;">
-                    <tr><th>Timestamp</th><th>Pelanggan</th><th>IP Address</th><th>Tipe Akses</th><th>Durasi/Trafik</th><th>Status</th><th>Aksi</th></tr>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Pelanggan</th>
+                        <th>IP Address</th>
+                        <th>Tipe Akses</th>
+                        <th>Durasi / Trafik</th>
+                        <th>Status</th>
+                    </tr>
                 </thead>
                 <tbody class="fw-medium text-dark">
-                    @forelse($logAktivitas as $item)
-                        <tr>
-                            <td>{{ optional($item->waktu_mulai)->format('d/m/y H:i') ?? '-' }}</td>
-                            <td>{{ $item->pelanggan->nama_pelanggan ?? '-' }}</td>
-                            <td>-</td>
-                            <td>{{ $item->is_anomali ? 'Anomali' : 'Normal' }}</td>
-                            <td>
-                                {{ $item->durasi_menit ? $item->durasi_menit . ' menit' : '-' }}
-                                / {{ $item->data_usage_mb ? number_format($item->data_usage_mb, 2, ',', '.') . ' MB' : '-' }}
-                            </td>
-                            <td>{{ $item->waktu_selesai ? 'Selesai' : 'Berjalan' }}</td>
-                            <td><i class="bi bi-folder-fill fs-4 text-dark"></i></td>
-                        </tr>
+                    @forelse($logAktivitas as $log)
+                    <tr>
+                        <td>{{ $log->waktu_mulai->format('d M Y, H:i') }}</td>
+                        <td>{{ optional($log->pelanggan)->nama_pelanggan ?? '-' }}</td>
+                        <td>
+                            @php
+                                $uname = optional($log->pelanggan)->username_mikrotik;
+                                $liveIp = $uname && isset($activeIps[$uname]) ? $activeIps[$uname] : 'Offline';
+                            @endphp
+                            @if($liveIp === 'Offline')
+                                <span class="text-muted small">Offline</span>
+                            @else
+                                <span class="badge bg-info text-dark">{{ $liveIp }}</span>
+                            @endif
+                        </td>
+                        <td><span class="badge bg-secondary">{{ optional(optional($log->pelanggan)->paket)->nama_paket ?? '-' }}</span></td>
+                        <td>{{ $log->durasi_menit ?? 0 }} Menit <br> <small class="text-muted">{{ number_format($log->data_usage_mb, 2) }} MB</small></td>
+                        <td>
+                            @if($log->is_anomali)
+                                <span class="badge bg-danger">Anomali</span>
+                            @else
+                                <span class="badge bg-success">Normal</span>
+                            @endif
+                        </td>
+                    </tr>
                     @empty
-                        <tr>
-                            <td colspan="7" class="py-4 text-muted">Belum ada log aktivitas.</td>
-                        </tr>
+                    <tr><td colspan="6" class="text-center py-3 text-muted">Belum ada aktivitas pemakaian pelanggan.</td></tr>
                     @endforelse
                 </tbody>
             </table>

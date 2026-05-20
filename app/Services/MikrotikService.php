@@ -128,6 +128,31 @@ class MikrotikService
             && array_key_exists('pass', $config);
     }
 
+    /**
+     * Mengeksekusi perintah mentah (raw command) ke RouterOS API.
+     *
+     * @param string $command Path perintah MikroTik (contoh: '/ip/hotspot/active/print')
+     * @param array $queries Array parameter query opsional
+     * @return array|mixed
+     */
+    public function comm(string $command, array $queries = [])
+    {
+        if (!$this->shouldSync()) {
+            return [];
+        }
+
+        try {
+            $api = $this->makeLegacyClient();
+            return $api->comm($command, $queries);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('MikroTik raw comm failed', [
+                'command' => $command,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
+    }
+
     private function makeLegacyClient(): \RouterosAPI
     {
         $api = new \RouterosAPI();
@@ -368,6 +393,26 @@ class MikrotikService
         }
 
         return $result;
+    }
+
+    public function getHotspotActiveSessions(): array
+    {
+        if (!$this->shouldSync()) {
+            return [];
+        }
+
+        try {
+            $api = $this->makeLegacyClient();
+            $sessions = $api->comm(self::HOTSPOT_ACTIVE_PATH . '/print');
+
+            return is_array($sessions) ? $sessions : [];
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik hotspot active sessions unavailable', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     public function ensureProfileExists(PaketBandwidth $paket): array

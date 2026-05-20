@@ -77,6 +77,18 @@ class PembayaranController extends Controller
         $validated['status_notifikasi'] = 'Pending';
         $validated['tanggal_bayar'] = now()->toDateString();
 
+        // --- PROTEKSI DOUBLE SUBMIT ---
+        $recentPayment = \App\Models\Pembayaran::where('id_pelanggan', $validated['id_pelanggan'])
+            ->where('periode_tagihan', $validated['periode_tagihan'])
+            ->where('nominal', $validated['nominal'])
+            ->where('created_at', '>=', now()->subMinutes(2))
+            ->first();
+
+        if ($recentPayment) {
+            return redirect()->back()->with('error', 'Transaksi ditolak: Pembayaran untuk periode dan nominal yang sama baru saja diproses beberapa detik yang lalu. Mohon tunggu sejenak.');
+        }
+        // ------------------------------
+
         $pembayaran = Pembayaran::create($validated);
 
         $pelanggan = Pelanggan::with('paket')->find($validated['id_pelanggan']);
@@ -145,6 +157,8 @@ class PembayaranController extends Controller
             }
         }
         // ----------------------------------
+
+        // Audit trail removed — logging handled by traffic log (log_aktivitas) per class diagram
 
         return redirect()->back()->with('success', 'Pembayaran berhasil dicatat dan kwitansi WA sedang dikirim otomatis!');
     }
