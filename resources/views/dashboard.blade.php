@@ -88,6 +88,9 @@
                         <button type="button" id="btn-set-threshold" class="btn btn-sm btn-outline-danger flex-grow-1">
                             <i class="bi bi-speedometer2"></i> Set Alert
                         </button>
+                        <button type="button" id="btn-toggle-alert-mute" class="btn btn-sm btn-outline-secondary flex-grow-1">
+                            <i class="bi bi-bell-slash"></i> Silent
+                        </button>
                         <span id="current-threshold-info" class="badge bg-secondary align-self-center small">Off</span>
                     </div>
                 </form>
@@ -192,22 +195,6 @@
         }
     });
 
-    function formatTrafficValue(value) {
-        if (!Number.isFinite(value)) {
-            return '0';
-        }
-
-        if (value >= 1000000) {
-            return (value / 1000000).toFixed(2) + ' Mbps';
-        }
-
-        if (value >= 1000) {
-            return (value / 1000).toFixed(2) + ' Kbps';
-        }
-
-        return Math.round(value) + ' bps';
-    }
-
     function updateTrafficChart(snapshot) {
         const timeLabel = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         trafficChart.data.labels.push(timeLabel);
@@ -292,122 +279,29 @@
     // ===== THRESHOLD MANAGEMENT =====
     let maxRxBps = 0; // 0 berarti alert mati
     let maxTxBps = 0;
-    let lastAlertTime = 0; // Debounce flag
     let isModalOpen = false;
-    const ALERT_DEBOUNCE_MS = 5000; // Jeda 5 detik antar alert
-    const ALERT_PERSIST_MS = 10 * 60 * 1000; // Persist alert across pages (10 minutes)
-
-    const THRESHOLD_STORAGE_KEY = 'trafficThresholds';
-
-    function saveThresholdsToLocalStorage() {
-        try {
-            const payload = { maxRxBps: Number(maxRxBps) || 0, maxTxBps: Number(maxTxBps) || 0 };
-            localStorage.setItem(THRESHOLD_STORAGE_KEY, JSON.stringify(payload));
-        } catch (e) {
-            console.warn('Gagal menyimpan thresholds ke localStorage', e);
-        }
-    }
 
     function loadThresholdsFromLocalStorage() {
-        try {
-            const raw = localStorage.getItem(THRESHOLD_STORAGE_KEY);
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            if (parsed) {
-                maxRxBps = Number(parsed.maxRxBps) || 0;
-                maxTxBps = Number(parsed.maxTxBps) || 0;
-            }
-        } catch (e) {
-            console.warn('Gagal membaca thresholds dari localStorage', e);
-        }
+        const thresholds = window.TrafficAlertUtils?.loadThresholds?.() || { maxRxBps: 0, maxTxBps: 0 };
+        maxRxBps = Number(thresholds.maxRxBps) || 0;
+        maxTxBps = Number(thresholds.maxTxBps) || 0;
+    }
+
+    function saveThresholdsToLocalStorage() {
+        window.TrafficAlertUtils?.saveThresholds?.(maxRxBps, maxTxBps);
+    }
+
+    function updateAlertMuteDisplay() {
+        window.TrafficAlertUtils?.updateAlertMuteDisplay?.();
+    }
+
+    function toggleAlertMuteState() {
+        window.TrafficAlertUtils?.toggleAlertMuteState?.();
+        updateAlertMuteDisplay();
     }
 
     function handleTrafficThresholdAlert(data, isOffline) {
-        if (isOffline || (maxRxBps <= 0 && maxTxBps <= 0)) {
-            return;
-        }
-
-        const currentTime = Date.now();
-        const rxExceed = maxRxBps > 0 && data.rx_bps > maxRxBps;
-        const txExceed = maxTxBps > 0 && data.tx_bps > maxTxBps;
-
-        if (!(rxExceed || txExceed) || (currentTime - lastAlertTime) <= ALERT_DEBOUNCE_MS) {
-            return;
-        }
-
-        const alertMsg = buildTrafficAlertMessage(data, rxExceed, txExceed);
-        const alertData = {
-            time: currentTime,
-            rxExceed: !!rxExceed,
-            txExceed: !!txExceed,
-            rx_bps: data.rx_bps || 0,
-            tx_bps: data.tx_bps || 0,
-            maxRxBps: maxRxBps || 0,
-            maxTxBps: maxTxBps || 0,
-            message: alertMsg,
-            expiresAt: currentTime + ALERT_PERSIST_MS,
-        };
-
-        persistTrafficAlert(alertData);
-        showTrafficWarningToast(data, rxExceed, txExceed);
-        lastAlertTime = currentTime;
-    }
-
-    function buildTrafficAlertMessage(data, rxExceed, txExceed) {
-        let alertMsg = '⚠️ Traffic Alert!\n\n';
-
-        if (rxExceed) {
-            alertMsg += `RX: ${formatTrafficValue(data.rx_bps)} (Threshold: ${(maxRxBps / 1000000).toFixed(0)} Mbps)\n`;
-        }
-
-        if (txExceed) {
-            alertMsg += `TX: ${formatTrafficValue(data.tx_bps)} (Threshold: ${(maxTxBps / 1000000).toFixed(0)} Mbps)`;
-        }
-
-        return alertMsg;
-    }
-
-    function persistTrafficAlert(alertData) {
-        try {
-            localStorage.setItem('trafficAlert', JSON.stringify(alertData));
-        } catch (e) {
-            console.warn('Gagal menyimpan alert ke localStorage', e);
-        }
-    }
-
-    function showTrafficWarningToast(data, rxExceed, txExceed) {
-        try {
-            const isMuted = localStorage.getItem('trafficAlertMuted') === '1';
-            if (isMuted || isModalOpen) {
-                return;
-            }
-
-            Swal.fire({
-                icon: 'warning',
-                title: 'Traffic Berlebih!',
-                text: (rxExceed ? `RX: ${formatTrafficValue(data.rx_bps)}` : '') + (txExceed ? (rxExceed ? ' / ' : '') + `TX: ${formatTrafficValue(data.tx_bps)}` : ''),
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                showCloseButton: true,
-                timer: 5000,
-                timerProgressBar: true,
-                didOpen: () => {
-                    try {
-                        const cb = Swal.getCloseButton();
-                        if (cb) {
-                            cb.addEventListener('click', function () {
-                                try {
-                                    localStorage.removeItem('trafficAlert');
-                                } catch (e) {}
-                            });
-                        }
-                    } catch (e) {}
-                }
-            });
-        } catch (e) {
-            console.warn('Error showing toast', e);
-        }
+        window.TrafficAlertUtils?.handleTrafficThresholdAlert?.(data, isOffline);
     }
 
     
@@ -471,6 +365,8 @@
         });
     });
 
+    window.TrafficAlertUtils?.bindMuteToggle?.('#btn-toggle-alert-mute');
+
     function updateThresholdDisplay() {
         const infoEl = document.getElementById('current-threshold-info');
         if (!infoEl) return;
@@ -490,6 +386,7 @@
     // Load persisted thresholds and inisialisasi tampilan
     loadThresholdsFromLocalStorage();
     updateThresholdDisplay();
+    updateAlertMuteDisplay();
 
     loadRealtimeStats();
     setInterval(loadRealtimeStats, 1000);
