@@ -63,9 +63,16 @@ class LaporanController extends Controller
             return (float) optional($pelanggan->paket)->harga;
         });
 
-        $transaksiLaporan = (clone $pembayaranQuery)
-            ->with(['pelanggan.paket', 'admin'])
-            ->latest('tanggal_bayar')
+        $transaksiLaporan = Pembayaran::with(['pelanggan.paket'])
+            ->selectRaw('id_pelanggan, SUM(nominal) as total_nominal, COUNT(id_pembayaran) as jumlah_transaksi, MAX(tanggal_bayar) as transaksi_terakhir')
+            ->when($start, function ($query) use ($start) {
+                $query->whereDate('tanggal_bayar', '>=', $start->toDateString());
+            })
+            ->when($end, function ($query) use ($end) {
+                $query->whereDate('tanggal_bayar', '<=', $end->toDateString());
+            })
+            ->groupBy('id_pelanggan')
+            ->orderByDesc('transaksi_terakhir')
             ->paginate(10)
             ->withQueryString();
 

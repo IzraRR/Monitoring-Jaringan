@@ -54,27 +54,24 @@
 </style>
 
 <div class="laporan-header mb-4">
-    <form method="GET" class="row g-3 align-items-end">
+    <form method="GET" class="row g-2 align-items-center">
         <div class="col-12 col-lg-3">
-            <label class="form-label fw-semibold mb-1">Laporan Pembayaran</label>
-            <h4 class="fw-bold mb-0">Laporan Pembayaran</h4>
+            <h4 class="fw-bold mb-0">Laporan Keuangan</h4>
         </div>
         <div class="col-12 col-md-3 col-lg-2">
-            <label for="start_date" class="form-label fw-semibold mb-1">Tanggal Mulai</label>
             <input type="date" id="start_date" name="start_date" value="{{ $startDate }}" class="form-control border-0 shadow-sm">
         </div>
         <div class="col-12 col-md-3 col-lg-2">
-            <label for="end_date" class="form-label fw-semibold mb-1">Tanggal Akhir</label>
             <input type="date" id="end_date" name="end_date" value="{{ $endDate }}" class="form-control border-0 shadow-sm">
         </div>
         <div class="col-12 col-md-3 col-lg-2">
-            <button type="submit" class="btn btn-light fw-semibold w-100 shadow-sm">Terapkan Filter</button>
+            <button type="submit" class="btn btn-light fw-semibold w-100 shadow-sm">Filter</button>
         </div>
         <div class="col-12 col-md-3 col-lg-2">
             <a href="{{ route('laporan.cetak', request()->only('start_date', 'end_date')) }}" class="btn btn-outline-light fw-semibold w-100 shadow-sm">Cetak PDF</a>
         </div>
-        <div class="col-12 col-md-3 col-lg-2">
-            <a href="{{ route('laporan.index') }}" class="btn btn-outline-light fw-semibold w-100 shadow-sm">Reset Filter</a>
+        <div class="col-12 col-md-3 col-lg-1">
+            <a href="{{ route('laporan.index') }}" class="btn btn-outline-light fw-semibold w-100 shadow-sm">Reset</a>
         </div>
     </form>
 </div>
@@ -143,32 +140,30 @@
         </div>
         <div class="table-responsive">
             <table class="table table-bordered table-hover align-middle mb-0">
-                <thead class="table-light">
+                <thead class="table-dark">
                     <tr>
-                        <th class="fw-bold text-center">ID</th>
-                        <th class="fw-bold">Pelanggan</th>
-                        <th class="fw-bold">Paket</th>
-                        <th class="fw-bold text-center">Periode</th>
-                        <th class="fw-bold text-center">Tanggal Bayar</th>
-                        <th class="fw-bold text-end">Nominal</th>
-                        <th class="fw-bold text-center">Status Notifikasi</th>
+                        <th width="5%">No</th>
+                        <th>Nama Pelanggan</th>
+                        <th>Paket Bandwidth</th>
+                        <th class="text-center">Jml Transaksi</th>
+                        <th>Transaksi Terakhir</th>
+                        <th class="text-center">Total Nominal</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($transaksiLaporan as $item)
-                        <tr>
-                            <td class="text-center">{{ $item->id_pembayaran }}</td>
-                            <td>{{ $item->pelanggan->nama_pelanggan ?? '-' }}</td>
-                            <td>{{ $item->pelanggan->paket->nama_paket ?? '-' }}</td>
-                            <td class="text-center">{{ $item->periode_tagihan }}</td>
-                            <td class="text-center">{{ optional($item->tanggal_bayar)->format('d/m/Y') ?? '-' }}</td>
-                            <td class="text-end">Rp {{ number_format($item->nominal, 0, ',', '.') }}</td>
-                            <td class="text-center">{{ $item->status_notifikasi }}</td>
-                        </tr>
+                    @forelse($transaksiLaporan as $key => $item)
+                    <tr>
+                        <td>{{ $transaksiLaporan->firstItem() + $key }}</td>
+                        <td class="fw-bold">{{ optional($item->pelanggan)->nama_pelanggan ?? 'Pelanggan Dihapus' }}</td>
+                        <td>{{ optional(optional($item->pelanggan)->paket)->nama_paket ?? '-' }}</td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ $item->jumlah_transaksi }}x</span></td>
+                        <td>{{ \Carbon\Carbon::parse($item->transaksi_terakhir)->format('d M Y') }}</td>
+                        <td class="text-center fw-bold text-success">Rp {{ number_format($item->total_nominal, 0, ',', '.') }}</td>
+                    </tr>
                     @empty
-                        <tr>
-                            <td colspan="7" class="text-center text-muted py-4">Belum ada transaksi untuk periode ini.</td>
-                        </tr>
+                    <tr>
+                        <td colspan="6" class="text-center py-3 text-muted">Belum ada data transaksi pada periode ini.</td>
+                    </tr>
                     @endforelse
                 </tbody>
             </table>

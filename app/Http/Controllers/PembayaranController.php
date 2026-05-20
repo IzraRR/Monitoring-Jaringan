@@ -82,12 +82,19 @@ class PembayaranController extends Controller
         $pelanggan = Pelanggan::with('paket')->find($validated['id_pelanggan']);
 
         if ($pelanggan) {
+            $hargaPaket = (float) $pelanggan->paket->harga;
+            $jumlahBulan = (int) floor((float) $request->nominal / $hargaPaket);
+
+            if ($jumlahBulan < 1) {
+                return redirect()->back()->withInput()->with('error', 'Nominal uang tidak mencukupi untuk harga paket ini.');
+            }
+
             $currentMasaAktif = $pelanggan->masa_aktif ? Carbon::parse($pelanggan->masa_aktif) : now();
 
             if ($currentMasaAktif->isPast()) {
-                $newMasaAktif = now()->addMonth();
+                $newMasaAktif = now()->addMonths($jumlahBulan);
             } else {
-                $newMasaAktif = $currentMasaAktif->addMonth();
+                $newMasaAktif = $currentMasaAktif->addMonths($jumlahBulan);
             }
 
             $pelanggan->update([
