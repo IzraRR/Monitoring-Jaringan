@@ -303,11 +303,6 @@
             </div>
 
             <div class="content-panel">
-                @hasSection('page_heading')
-                    <h2 class="fw-bold mb-3" style="color: #17395f; text-transform: uppercase; letter-spacing: 0.3px;">
-                        @yield('page_heading')
-                    </h2>
-                @endif
                 @yield('content')
             </div>
 

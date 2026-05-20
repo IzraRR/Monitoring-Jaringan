@@ -8,24 +8,16 @@ use App\Services\MikrotikService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PelangganController extends Controller
 {
-    /**
-     * Deteksi tipe koneksi berdasarkan nama paket pelanggan.
-     * Jika nama paket mengandung "pppoe" (case-insensitive), return "PPPoE".
-     * Sebaliknya, return "Hotspot".
-     * 
-     * @param Pelanggan $pelanggan
-     * @return string 'Hotspot' atau 'PPPoE'
-     */
     private function detectTypeFromPaket(Pelanggan $pelanggan): string
     {
         $pelanggan->loadMissing('paket');
         $namaPaket = $pelanggan->paket?->nama_paket ?? '';
-        
-        // Convert ke lowercase terlebih dahulu untuk pendeteksian case-insensitive yang reliable
+
         return Str::contains(strtolower($namaPaket), 'pppoe') ? 'PPPoE' : 'Hotspot';
     }
 
@@ -147,13 +139,11 @@ class PelangganController extends Controller
     {
         try {
             $username = $pelanggan->username_mikrotik;
-            
-            // Deteksi tipe koneksi dari nama paket sebelum data dihapus
+
             $tipe = $this->detectTypeFromPaket($pelanggan);
-            
+
             $pelanggan->delete();
-            
-            // Hapus dari MikroTik dengan tipe koneksi yang terdeteksi
+
             $sync = $mikrotikService->syncPelangganDeletedByType($username, $tipe);
 
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil dihapus.');
@@ -176,8 +166,8 @@ class PelangganController extends Controller
         foreach ($pelangganList as $p) {
             try {
                 $namaPaket = strtolower(trim($p->paket->nama_paket ?? ''));
-                
-                \Log::info("SYNC MIKROTIK -> User: {$p->username_mikrotik} | Paket: {$namaPaket}");
+
+                Log::info("SYNC MIKROTIK -> User: {$p->username_mikrotik} | Paket: {$namaPaket}");
 
                 if (stripos($namaPaket, 'pppoe') !== false) {
                     $sync = $mikrotikService->tambahUserPPPoE($p);
@@ -188,11 +178,11 @@ class PelangganController extends Controller
                 if ($sync['success']) {
                     $berhasil++;
                 } else {
-                    \Log::error("GAGAL SYNC User {$p->username_mikrotik}: " . ($sync['message'] ?? 'Unknown error'));
+                    Log::error("GAGAL SYNC User {$p->username_mikrotik}: " . ($sync['message'] ?? 'Unknown error'));
                     $gagal++;
                 }
             } catch (\Throwable $e) {
-                \Log::error("GAGAL SYNC User {$p->username_mikrotik}: " . $e->getMessage());
+                Log::error("GAGAL SYNC User {$p->username_mikrotik}: " . $e->getMessage());
                 $gagal++;
             }
         }
@@ -207,8 +197,6 @@ class PelangganController extends Controller
     {
         try {
             $isLocked = strtolower((string) $pelanggan->status_aktif) === 'locked';
-            
-            // Deteksi tipe koneksi dari nama paket
             $tipe = $this->detectTypeFromPaket($pelanggan);
 
             if ($isLocked) {
@@ -235,10 +223,7 @@ class PelangganController extends Controller
     public function disconnect(Pelanggan $pelanggan, MikrotikService $mikrotikService): RedirectResponse
     {
         try {
-            // Deteksi tipe koneksi dari nama paket
             $tipe = $this->detectTypeFromPaket($pelanggan);
-            
-            // HANYA putus sesi aktif di MikroTik (tidak ubah status DB)
             $syncDisconnect = $mikrotikService->disconnectActiveSessionByType($pelanggan, $tipe);
 
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Sesi pelanggan berhasil diputus paksa (Kick).');

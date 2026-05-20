@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\PaketBandwidth;
 use App\Models\Pelanggan;
 use App\Services\MikrotikService;
-use Illuminate\Support\Str;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Illuminate\Support\Str;
 
 class BandwidthController extends Controller
 {
@@ -16,7 +16,6 @@ class BandwidthController extends Controller
     {
         $normalized = preg_replace('/\s+/', '', trim($value)) ?? trim($value);
 
-        // Standarkan input seperti 1m, 10Mbps, 512k menjadi format kapital (1M, 10M, 512K).
         $normalized = preg_replace_callback('/(\d+(?:\.\d+)?)([a-zA-Z]+)/', function (array $matches) {
             $unit = strtoupper($matches[2]);
             $unit = str_replace(['MBPS', 'MBIT', 'MB'], 'M', $unit);
@@ -33,12 +32,12 @@ class BandwidthController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
 
-        $paket = PaketBandwidth::withCount('pelanggan')
-            ->withCount([
-                'pelanggan as pelanggan_aktif_count' => function ($query) {
-                    $query->where('status_aktif', 'Aktif');
-                },
-            ])
+        $paket = PaketBandwidth::withCount([
+            'pelanggan',
+            'pelanggan as pelanggan_aktif_count' => function ($q) {
+                $q->where('status_aktif', 'Aktif');
+            },
+        ])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where('nama_paket', 'like', "%{$search}%");
             })
@@ -75,11 +74,11 @@ class BandwidthController extends Controller
         $validated['limit_download'] = $this->normalizeRateInput($validated['limit_download']);
         $validated['limit_upload'] = $this->normalizeRateInput($validated['limit_upload']);
 
-        $paket = PaketBandwidth::create($validated);
+        PaketBandwidth::create($validated);
 
-        // Deteksi tipe berdasarkan nama paket (case-insensitive)
-        $namaPaket = strtolower(trim($paket->nama_paket));
-        
+        $paket = PaketBandwidth::latest('id_paket')->first();
+        $namaPaket = strtolower(trim($validated['nama_paket']));
+
         try {
             if (stripos($namaPaket, 'pppoe') !== false) {
                 $sync = $mikrotikService->tambahProfilPPPoE($paket);
@@ -123,9 +122,8 @@ class BandwidthController extends Controller
 
         $fresh = $bandwidth->fresh();
 
-        // Deteksi tipe baru berdasarkan nama paket
         $namaPaketBaru = strtolower(trim($fresh->nama_paket));
-        
+
         try {
             if (stripos($namaPaketBaru, 'pppoe') !== false) {
                 $sync = $mikrotikService->tambahProfilPPPoE($fresh);
@@ -166,19 +164,20 @@ class BandwidthController extends Controller
         if ($bandwidth->pelanggan()->exists()) {
             return redirect()
                 ->route('bandwidth.index')
-                ->with('warning', 'Paket tidak dapat dihapus karena masih digunakan oleh pelanggan. Pindahkan paket pelanggan terlebih dahulu.');
+                ->with('warning', 'Profil bandwidth tidak dapat dihapus karena masih digunakan pelanggan.');
         }
 
         $profileName = $bandwidth->nama_paket;
-
-        // Deteksi tipe berdasarkan nama paket sebelum dihapus
         $namaPaket = strtolower(trim($profileName));
-        $tipe = stripos($namaPaket, 'pppoe') !== false ? 'PPPoE' : 'Hotspot';
 
         $bandwidth->delete();
 
         try {
-            $sync = $mikrotikService->removeProfileIfUnusedByType($profileName, $tipe);
+            if (stripos($namaPaket, 'pppoe') !== false) {
+                $sync = $mikrotikService->removeProfileIfUnusedByType($profileName, 'PPPoE');
+            } else {
+                $sync = $mikrotikService->removeProfileIfUnusedByType($profileName, 'Hotspot');
+            }
         } catch (\Throwable $e) {
             $sync = ['success' => false, 'message' => $e->getMessage()];
         }

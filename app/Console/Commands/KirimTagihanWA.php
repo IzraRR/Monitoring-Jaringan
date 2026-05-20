@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Pelanggan;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -27,30 +28,30 @@ class KirimTagihanWA extends Command
     public function handle(): int
     {
         Log::info('=== MULAI: Kirim Tagihan WhatsApp ===');
-        $this->line('🔄 Mencari pelanggan dengan masa aktif mendekati batas...');
+        $this->line('🔄 Mencari pelanggan dengan masa aktif yang akan habis...');
 
         try {
             // Tentukan range tanggal: hari ini sampai H+3 (3 hari ke depan)
             // Gunakan Carbon::today() agar hanya membandingkan tanggal (tanpa waktu/jam)
-            $tanggalMulai = Carbon::today()->toDateString();
-            $tanggalAkhir = Carbon::today()->addDays(3)->toDateString();
+            $tanggalMulai = Carbon::today();
+            $tanggalAkhir = Carbon::today()->addDays(3);
 
-            $this->line("🔍 Memeriksa pelanggan dengan masa aktif antara {$tanggalMulai} sampai {$tanggalAkhir}...");
+            $this->line('🔍 Memeriksa pelanggan dengan masa aktif antara ' . $tanggalMulai->translatedFormat('d F Y') . ' sampai ' . $tanggalAkhir->translatedFormat('d F Y') . '.');
 
             // Query pelanggan aktif dengan masa aktif di antara hari ini sampai 3 hari ke depan
             $pelangganList = Pelanggan::with('paket')
                 ->where('status_aktif', 'Aktif')
-                ->whereBetween('masa_aktif', [$tanggalMulai, $tanggalAkhir])
+                ->whereBetween('masa_aktif', [$tanggalMulai->toDateString(), $tanggalAkhir->toDateString()])
                 ->get();
 
             if ($pelangganList->isEmpty()) {
-                Log::info("Tidak ada pelanggan yang jatuh tempo antara {$tanggalMulai} sampai {$tanggalAkhir}.");
+                Log::info('Tidak ada pelanggan yang jatuh tempo antara ' . $tanggalMulai->translatedFormat('d F Y') . ' sampai ' . $tanggalAkhir->translatedFormat('d F Y') . '.');
                 $this->info("✅ Tidak ada pelanggan yang memerlukan notifikasi dalam rentang ini.");
                 return self::SUCCESS;
             }
 
             $this->line("📋 Ditemukan {$pelangganList->count()} pelanggan untuk diperiksa.");
-            Log::info("Ditemukan {$pelangganList->count()} pelanggan untuk notifikasi tagihan dalam rentang {$tanggalMulai} sampai {$tanggalAkhir}.");
+            Log::info('Ditemukan ' . $pelangganList->count() . ' pelanggan untuk notifikasi tagihan dalam rentang ' . $tanggalMulai->translatedFormat('d F Y') . ' sampai ' . $tanggalAkhir->translatedFormat('d F Y') . '.');
 
             $successCount = 0;
             $failureCount = 0;
@@ -63,23 +64,23 @@ class KirimTagihanWA extends Command
                     $cacheKey = 'wa_tagihan_sent_' . $pelanggan->id_pelanggan;
                     if (Cache::has($cacheKey)) {
                         Log::info("Pelanggan ID {$pelanggan->id_pelanggan} ({$pelanggan->nama_pelanggan}) sudah menerima notifikasi sebelumnya, skip.");
-                        $this->line("⏭️  Pelanggan {$pelanggan->nama_pelanggan} sudah dikirimi pesan, skip (cache ada).");
+                        $this->line("⏭️  Pelanggan {$pelanggan->nama_pelanggan} sudah pernah dikirimi pesan, dilewati.");
                         $skippedCount++;
                         continue;
                     }
 
                     // Validasi data pelanggan
                     if (empty($pelanggan->no_hp)) {
-                        Log::warning("Pelanggan ID {$pelanggan->id_pelanggan} ({$pelanggan->nama_pelanggan}) tidak punya nomor HP.");
-                        $this->warn("⚠️  Pelanggan {$pelanggan->nama_pelanggan} tidak punya nomor HP.");
+                        Log::warning('Pelanggan ID ' . $pelanggan->id_pelanggan . ' (' . $pelanggan->nama_pelanggan . ') tidak punya nomor HP.');
+                        $this->warn('⚠️  Pelanggan ' . $pelanggan->nama_pelanggan . ' tidak punya nomor HP.');
                         $failureCount++;
                         continue;
                     }
 
                     // Validasi paket relasi
                     if (!$pelanggan->paket) {
-                        Log::warning("Pelanggan ID {$pelanggan->id_pelanggan} tidak punya paket terkait.");
-                        $this->warn("⚠️  Pelanggan {$pelanggan->nama_pelanggan} tidak punya paket.");
+                        Log::warning('Pelanggan ID ' . $pelanggan->id_pelanggan . ' tidak punya paket terkait.');
+                        $this->warn('⚠️  Pelanggan ' . $pelanggan->nama_pelanggan . ' tidak punya paket.');
                         $failureCount++;
                         continue;
                     }
@@ -87,8 +88,8 @@ class KirimTagihanWA extends Command
                     // Normalisasi nomor WhatsApp (08xxx -> 628xxx)
                     $phoneNumber = $this->normalizeWhatsAppNumber($pelanggan->no_hp);
                     if (empty($phoneNumber)) {
-                        Log::warning("Nomor HP {$pelanggan->no_hp} pelanggan ID {$pelanggan->id_pelanggan} tidak valid.");
-                        $this->warn("⚠️  Nomor HP pelanggan {$pelanggan->nama_pelanggan} tidak valid.");
+                        Log::warning('Nomor HP ' . $pelanggan->no_hp . ' pelanggan ID ' . $pelanggan->id_pelanggan . ' tidak valid.');
+                        $this->warn('⚠️  Nomor HP pelanggan ' . $pelanggan->nama_pelanggan . ' tidak valid.');
                         $failureCount++;
                         continue;
                     }
@@ -97,7 +98,7 @@ class KirimTagihanWA extends Command
                     $masaAktifFormat = Carbon::parse($pelanggan->masa_aktif)->translatedFormat('d F Y');
                     $hargaFormat = number_format($pelanggan->paket->harga, 0, ',', '.');
 
-                    $pesan = "Peringatan Tagihan: Masa aktif paket {$pelanggan->paket->nama_paket} Anda akan habis pada {$masaAktifFormat}. Tagihan: Rp {$hargaFormat}. Silakan lakukan pembayaran segera untuk menjaga kelancaran layanan Anda.";
+                    $pesan = 'Peringatan Tagihan: Masa aktif paket ' . $pelanggan->paket->nama_paket . ' Anda akan habis pada ' . $masaAktifFormat . '. Tagihan: Rp ' . $hargaFormat . '. Silakan lakukan pembayaran segera untuk menjaga kelancaran layanan Anda.';
 
                     // Kirim via WhatsApp Gateway (Fonnte)
                     $sendResult = $this->sendWhatsAppNotification(
@@ -111,34 +112,42 @@ class KirimTagihanWA extends Command
                         // Set cache untuk 4 hari ke depan agar tidak terkirim lagi dalam rentang ini
                         Cache::put($cacheKey, true, now()->addDays(4));
                         $successCount++;
-                        $this->line("✅ Notifikasi terkirim ke {$pelanggan->nama_pelanggan}");
+                        $this->line('✅ Notifikasi terkirim ke ' . $pelanggan->nama_pelanggan . '.');
                     } else {
-                        $this->error("❌ Gagal kirim ke {$pelanggan->nama_pelanggan} ({$pelanggan->no_hp}): {$sendResult['error']}");
+                        $this->error('❌ Gagal kirim ke ' . $pelanggan->nama_pelanggan . ' (' . $pelanggan->no_hp . '): ' . $sendResult['error']);
                         $failureCount++;
                     }
 
-                } catch (\Exception $e) {
-                    Log::error("Error mengirim notifikasi untuk pelanggan ID {$pelanggan->id_pelanggan}: " . $e->getMessage());
-                    $this->error("❌ Gagal mengirim ke {$pelanggan->nama_pelanggan}: {$e->getMessage()}");
+                } catch (\Throwable $e) {
+                    $errorMessage = $this->formatWhatsAppError($e);
+                    Log::error('Error mengirim notifikasi untuk pelanggan ID ' . $pelanggan->id_pelanggan . ': ' . $errorMessage, [
+                        'exception' => get_class($e),
+                        'raw_message' => $e->getMessage(),
+                    ]);
+                    $this->error('❌ Gagal mengirim ke ' . $pelanggan->nama_pelanggan . ': ' . $errorMessage);
                     $failureCount++;
                 }
             }
 
             // Summary hasil
-            Log::info("=== SELESAI: Kirim Tagihan WhatsApp ===");
-            Log::info("Range: {$tanggalMulai} sampai {$tanggalAkhir} | Berhasil: {$successCount}, Gagal: {$failureCount}, Di-skip (cache): {$skippedCount}");
+            Log::info('=== SELESAI: Kirim Tagihan WhatsApp ===');
+            Log::info('Rentang: ' . $tanggalMulai->translatedFormat('d F Y') . ' sampai ' . $tanggalAkhir->translatedFormat('d F Y') . ' | Berhasil: ' . $successCount . ', Gagal: ' . $failureCount . ', Dilewati (cache): ' . $skippedCount);
 
             $this->line("\n📊 RINGKASAN:");
-            $this->line("   📅 Range: {$tanggalMulai} sampai {$tanggalAkhir}");
+            $this->line('   📅 Rentang: ' . $tanggalMulai->translatedFormat('d F Y') . ' sampai ' . $tanggalAkhir->translatedFormat('d F Y'));
             $this->line("   ✅ Berhasil dikirim: {$successCount}");
             $this->line("   ❌ Gagal: {$failureCount}");
-            $this->line("   ⏭️  Di-skip (sudah dikirim): {$skippedCount}");
+            $this->line("   ⏭️  Dilewati (sudah dikirim): {$skippedCount}");
 
             return self::SUCCESS;
 
-        } catch (\Exception $e) {
-            Log::error('Fatal Error dalam KirimTagihanWA: ' . $e->getMessage());
-            $this->error("❌ Error Fatal: {$e->getMessage()}");
+        } catch (\Throwable $e) {
+            $errorMessage = $this->formatWhatsAppError($e);
+            Log::error('Galat fatal dalam KirimTagihanWA: ' . $errorMessage, [
+                'exception' => get_class($e),
+                'raw_message' => $e->getMessage(),
+            ]);
+            $this->error('❌ Galat fatal: ' . $errorMessage);
             return self::FAILURE;
         }
     }
@@ -229,14 +238,57 @@ class KirimTagihanWA extends Command
                 return ['success' => false, 'error' => $errorMsg];
             }
 
-        } catch (\Illuminate\Http\Client\RequestException $e) {
-            $errorMsg = "HTTP Request Exception: " . $e->getMessage();
-            Log::error("HTTP Exception saat mengirim WA ke {$phoneNumber} (Pelanggan ID {$idPelanggan}): {$errorMsg}");
+        } catch (ConnectionException $e) {
+            $errorMsg = $this->formatWhatsAppError($e);
+            Log::error("Koneksi gagal saat mengirim WA ke {$phoneNumber} (Pelanggan ID {$idPelanggan}): {$errorMsg}", [
+                'raw_message' => $e->getMessage(),
+            ]);
             return ['success' => false, 'error' => $errorMsg];
-        } catch (\Exception $e) {
-            $errorMsg = "Unexpected Error: " . $e->getMessage();
-            Log::error("Error saat mengirim WhatsApp ke pelanggan ID {$idPelanggan}: {$errorMsg}");
+        } catch (\Throwable $e) {
+            $errorMsg = $this->formatWhatsAppError($e);
+            Log::error("Error saat mengirim WhatsApp ke pelanggan ID {$idPelanggan}: {$errorMsg}", [
+                'raw_message' => $e->getMessage(),
+            ]);
             return ['success' => false, 'error' => $errorMsg];
         }
+    }
+
+    /**
+     * Ubah pesan error teknis menjadi pesan yang lebih jelas untuk operator.
+     */
+    private function formatWhatsAppError(\Throwable $e): string
+    {
+        $message = $e->getMessage();
+        $curlCode = $this->extractCurlCode($message);
+
+        if ($curlCode !== null) {
+            return match ($curlCode) {
+                6 => 'Gagal menghubungi server WhatsApp: domain API tidak bisa di-resolve (cek internet atau DNS).',
+                7 => 'Gagal terhubung ke server WhatsApp: koneksi ditolak.',
+                28 => 'Gagal mengirim ke server WhatsApp: koneksi terlalu lama / timeout.',
+                35 => 'Gagal mengirim ke server WhatsApp: masalah SSL/TLS.',
+                52 => 'Gagal mengirim ke server WhatsApp: respons kosong dari server.',
+                56 => 'Gagal mengirim ke server WhatsApp: koneksi terputus saat proses pengiriman.',
+                default => 'Gagal mengirim ke server WhatsApp (cURL ' . $curlCode . '): ' . $message,
+            };
+        }
+
+        if ($e instanceof ConnectionException) {
+            return 'Gagal koneksi ke server WhatsApp: ' . $message;
+        }
+
+        return 'Terjadi galat saat mengirim WhatsApp: ' . $message;
+    }
+
+    /**
+     * Ambil kode cURL dari pesan error bila tersedia.
+     */
+    private function extractCurlCode(string $message): ?int
+    {
+        if (preg_match('/cURL error\s+(\d+)/i', $message, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
     }
 }

@@ -47,8 +47,8 @@
                             <td>{{ $item->id_paket }}</td>
                             <td>{{ $item->nama_paket }}</td>
                             <td>
-                                <span class="badge {{ Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'bg-info' : 'bg-primary' }}">
-                                    {{ Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot' }}
+                                <span class="badge {{ \Illuminate\Support\Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'bg-info' : 'bg-primary' }}">
+                                    {{ \Illuminate\Support\Str::contains(strtolower($item->nama_paket), 'pppoe') ? 'PPPoE' : 'Hotspot' }}
                                 </span>
                             </td>
                             <td>{{ $item->limit_download }}</td>
@@ -64,12 +64,7 @@
                                 @endif
                             </td>
                             <td>
-                                <!-- Tombol 1: Edit -->
-                                <a href="{{ route('bandwidth.edit', $item) }}" class="btn btn-sm btn-outline-primary me-1" title="Edit Profil">
-                                    <i class="bi bi-pencil-fill"></i>
-                                </a>
-                                
-                                <!-- Tombol 2: Hapus (Form DELETE) -->
+                                <a href="{{ route('bandwidth.edit', $item) }}" class="btn btn-sm btn-outline-primary me-1" title="Edit Profil"><i class="bi bi-pencil-fill"></i></a>
                                 <form action="{{ route('bandwidth.destroy', $item) }}" method="POST" class="d-inline form-delete-bandwidth">
                                     @csrf
                                     @method('DELETE')
@@ -94,11 +89,8 @@
     </div>
 </div>
 
-<!-- CDN SweetAlert2 -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
 <script>
-    // Konfirmasi Hapus Profil Bandwidth dengan SweetAlert2
     document.querySelectorAll('.form-delete-bandwidth').forEach(form => {
         form.addEventListener('submit', function(e) {
             e.preventDefault();

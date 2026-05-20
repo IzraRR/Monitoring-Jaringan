@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(MikrotikService $mikrotikService)
     {
         $today = now()->toDateString();
 
@@ -37,11 +37,14 @@ class DashboardController extends Controller
             ->where('is_anomali', true)
             ->count();
 
+        $mikrotik = $mikrotikService->getSystemSummary();
+
         return view('dashboard', [
             'stats' => $stats,
             'trafficLabels' => $trafficSeries->pluck('tanggal')->map(fn ($value) => date('d M', strtotime($value)))->values(),
             'trafficData' => $trafficSeries->pluck('usage_mb')->map(fn ($value) => round((float) $value, 2))->values(),
             'anomaliHariIni' => $anomaliHariIni,
+            'mikrotik' => $mikrotik,
             'recentPayments' => Pembayaran::with('pelanggan')
                 ->latest('tanggal_bayar')
                 ->limit(5)

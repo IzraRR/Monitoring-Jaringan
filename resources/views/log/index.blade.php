@@ -5,9 +5,30 @@
 
 @section('content')
 <div class="row g-3 mb-3">
-    <div class="col-md-4"><div class="card border-0 shadow-sm rounded-3 h-100"><div class="card-body"><p class="text-secondary mb-1">Total Log Hari Ini</p><h4 class="fw-bold mb-0">{{ number_format($summary['total_hari_ini']) }}</h4></div></div></div>
-    <div class="col-md-4"><div class="card border-0 shadow-sm rounded-3 h-100"><div class="card-body"><p class="text-secondary mb-1">Anomali Hari Ini</p><h4 class="fw-bold text-danger mb-0">{{ number_format($summary['anomali_hari_ini']) }}</h4></div></div></div>
-    <div class="col-md-4"><div class="card border-0 shadow-sm rounded-3 h-100"><div class="card-body"><p class="text-secondary mb-1">Sesi Sedang Berjalan</p><h4 class="fw-bold text-success mb-0">{{ number_format($summary['sedang_berjalan']) }}</h4></div></div></div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">Total Log Hari Ini</div>
+                <div class="fs-4 fw-bold">{{ number_format($summary['total_hari_ini'] ?? 0) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">Anomali Hari Ini</div>
+                <div class="fs-4 fw-bold text-warning">{{ number_format($summary['anomali_hari_ini'] ?? 0) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">Sedang Berjalan</div>
+                <div class="fs-4 fw-bold text-info">{{ number_format($summary['sedang_berjalan'] ?? 0) }}</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="card border-0 shadow-sm rounded-3 border border-dark mb-4 mt-3">
@@ -41,21 +62,13 @@
                         <tr>
                             <td>{{ optional($item->waktu_mulai)->format('d/m/y H:i') ?? '-' }}</td>
                             <td>{{ $item->pelanggan->nama_pelanggan ?? '-' }}</td>
-                            <td>{{ $item->pelanggan->username_mikrotik ?? '-' }}</td>
-                            <td>{{ strtoupper(config('services.mikrotik.sync_mode', 'hotspot')) === 'PPPOE' ? 'PPPoE' : 'Hotspot' }}</td>
+                            <td>-</td>
+                            <td>{{ $item->is_anomali ? 'Anomali' : 'Normal' }}</td>
                             <td>
                                 {{ $item->durasi_menit ? $item->durasi_menit . ' menit' : '-' }}
                                 / {{ $item->data_usage_mb ? number_format($item->data_usage_mb, 2, ',', '.') . ' MB' : '-' }}
                             </td>
-                            <td>
-                                @if($item->is_anomali)
-                                    <span class="badge bg-danger">Gagal/Anomali</span>
-                                @elseif($item->waktu_selesai)
-                                    <span class="badge bg-success">Sukses</span>
-                                @else
-                                    <span class="badge bg-warning text-dark">Berjalan</span>
-                                @endif
-                            </td>
+                            <td>{{ $item->waktu_selesai ? 'Selesai' : 'Berjalan' }}</td>
                             <td><i class="bi bi-folder-fill fs-4 text-dark"></i></td>
                         </tr>
                     @empty

@@ -45,7 +45,6 @@
                 <select name="status_aktif" class="form-select" required>
                     <option value="Aktif" @selected(old('status_aktif', $pelanggan->status_aktif) === 'Aktif')>Aktif</option>
                     <option value="Nonaktif" @selected(old('status_aktif', $pelanggan->status_aktif) === 'Nonaktif')>Nonaktif</option>
-                    <option value="Locked" @selected(old('status_aktif', $pelanggan->status_aktif) === 'Locked')>Locked</option>
                 </select>
             </div>
             <div class="col-12 d-flex gap-2">

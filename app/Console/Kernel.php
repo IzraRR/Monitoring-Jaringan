@@ -14,6 +14,8 @@ class Kernel extends ConsoleKernel
     {
         // Jadwalkan pengiriman notifikasi tagihan setiap hari pukul 08:00
         $schedule->command('app:kirim-tagihan-wa')->dailyAt('08:00');
+        // Nonaktifkan pelanggan kedaluwarsa setiap tengah malam (01 menit)
+        $schedule->command('app:nonaktifkan-pelanggan')->dailyAt('00:01');
     }
 
     /**

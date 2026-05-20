@@ -49,10 +49,9 @@ return [
     ],
 
     'whatsapp' => [
-        'enabled' => filter_var(env('WHATSAPP_ENABLED', true), FILTER_VALIDATE_BOOL),
-        'url' => env('WHATSAPP_API_URL', 'https://api.fonnte.com/send'),
-        'token' => env('WHATSAPP_API_TOKEN', env('apiToken')),
-        'country_code' => env('WHATSAPP_COUNTRY_CODE', '62'),
+        'enabled' => filter_var(env('WHATSAPP_ENABLED', false), FILTER_VALIDATE_BOOL),
+        'url' => env('WHATSAPP_URL'),
+        'token' => env('WHATSAPP_TOKEN'),
     ],
 
 ];

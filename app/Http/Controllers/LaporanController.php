@@ -10,64 +10,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class LaporanController extends Controller
 {
-    public function cetakPdf(Request $request)
-    {
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
-
-        $start = null;
-        $end = null;
-
-        if (is_string($startDate) && $startDate !== '') {
-            try {
-                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
-            } catch (\Throwable $e) {
-                $start = null;
-            }
-        }
-
-        if (is_string($endDate) && $endDate !== '') {
-            try {
-                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
-            } catch (\Throwable $e) {
-                $end = null;
-            }
-        }
-
-        if ($start && $end && $start->gt($end)) {
-            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
-        }
-
-        $riwayatPembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
-            ->whereIn('status_notifikasi', ['Send', 'Terkirim', 'Sukses'])
-            ->when($start, function ($query) use ($start) {
-                $query->whereDate('tanggal_bayar', '>=', $start->toDateString());
-            })
-            ->when($end, function ($query) use ($end) {
-                $query->whereDate('tanggal_bayar', '<=', $end->toDateString());
-            })
-            ->latest('tanggal_bayar')
-            ->latest('id_pembayaran')
-            ->get();
-
-        $totalPemasukan = $riwayatPembayaran->sum('nominal');
-
-        $periodLabel = ($startDate || $endDate)
-            ? trim(($startDate ?: 'awal') . ' s/d ' . ($endDate ?: 'akhir'))
-            : 'Semua Periode';
-
-        $pdf = Pdf::loadView('laporan.pdf', [
-            'riwayatPembayaran' => $riwayatPembayaran,
-            'totalPemasukan' => $totalPemasukan,
-            'periodLabel' => $periodLabel,
-            'startDate' => $startDate,
-            'endDate' => $endDate,
-            'printedAt' => now(),
-        ])->setPaper('a4', 'portrait');
-
-        return $pdf->download('Laporan_Keuangan_SMKN53.pdf');
-    }
-
     public function index(Request $request)
     {
         $startDate = $request->query('start_date');
@@ -121,6 +63,12 @@ class LaporanController extends Controller
             return (float) optional($pelanggan->paket)->harga;
         });
 
+        $transaksiLaporan = (clone $pembayaranQuery)
+            ->with(['pelanggan.paket', 'admin'])
+            ->latest('tanggal_bayar')
+            ->paginate(10)
+            ->withQueryString();
+
         $pemasukanPerPaket = Pembayaran::query()
             ->join('pelanggan', 'pembayaran.id_pelanggan', '=', 'pelanggan.id_pelanggan')
             ->join('paket_bandwidth', 'pelanggan.id_paket', '=', 'paket_bandwidth.id_paket')
@@ -152,18 +100,6 @@ class LaporanController extends Controller
             ->orderBy('bulan_key')
             ->get();
 
-        $transaksiLaporan = Pembayaran::with(['pelanggan', 'admin'])
-            ->when($start, function ($query) use ($start) {
-                $query->whereDate('tanggal_bayar', '>=', $start->toDateString());
-            })
-            ->when($end, function ($query) use ($end) {
-                $query->whereDate('tanggal_bayar', '<=', $end->toDateString());
-            })
-            ->latest('tanggal_bayar')
-            ->latest('id_pembayaran')
-            ->paginate(10)
-            ->withQueryString();
-
         return view('laporan.index', [
             'summary' => [
                 'total_pemasukan' => $totalPemasukan,
@@ -179,5 +115,56 @@ class LaporanController extends Controller
             'endDate' => $endDate,
             'transaksiLaporan' => $transaksiLaporan,
         ]);
+    }
+
+    public function cetakPdf(Request $request)
+    {
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+
+        $start = null;
+        $end = null;
+
+        if (is_string($startDate) && $startDate !== '') {
+            try {
+                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
+            } catch (\Throwable $e) {
+                $start = null;
+            }
+        }
+
+        if (is_string($endDate) && $endDate !== '') {
+            try {
+                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
+            } catch (\Throwable $e) {
+                $end = null;
+            }
+        }
+
+        $riwayatPembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
+            ->when($start, function ($query) use ($start) {
+                $query->where('tanggal_bayar', '>=', $start->toDateString());
+            })
+            ->when($end, function ($query) use ($end) {
+                $query->where('tanggal_bayar', '<=', $end->toDateString());
+            })
+            ->latest('tanggal_bayar')
+            ->get();
+
+        $totalPemasukan = $riwayatPembayaran->sum('nominal');
+        $periodLabel = $start && $end
+            ? $start->translatedFormat('d F Y') . ' - ' . $end->translatedFormat('d F Y')
+            : ($start ? $start->translatedFormat('d F Y') : ($end ? $end->translatedFormat('d F Y') : 'Seluruh Periode'));
+
+        $printedAt = now();
+
+        $pdf = Pdf::loadView('laporan.pdf', [
+            'riwayatPembayaran' => $riwayatPembayaran,
+            'totalPemasukan' => $totalPemasukan,
+            'periodLabel' => $periodLabel,
+            'printedAt' => $printedAt,
+        ]);
+
+        return $pdf->download('laporan-pembayaran.pdf');
     }
 }

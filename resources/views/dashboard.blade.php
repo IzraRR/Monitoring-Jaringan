@@ -84,9 +84,12 @@
                     <label class="form-label text-secondary mb-1">Threshold Penuh :</label>
                     <input type="number" class="form-control bg-dark text-white text-center fw-bold fs-4 mb-3" value="100" style="border-radius: 8px;" disabled>
                     
-                    <button type="button" class="btn btn-secondary w-100 fw-bold border-dark mb-4" style="background-color: #cbd5e1; color:#0f172a;" disabled>
-                        MONITORING OTOMATIS
-                    </button>
+                    <div class="d-flex gap-2 mb-4">
+                        <button type="button" id="btn-set-threshold" class="btn btn-sm btn-outline-danger flex-grow-1">
+                            <i class="bi bi-speedometer2"></i> Set Alert
+                        </button>
+                        <span id="current-threshold-info" class="badge bg-secondary align-self-center small">Off</span>
+                    </div>
                 </form>
 
                 <p class="text-secondary mb-1 mt-2">Status Peringatan:</p>
@@ -131,6 +134,7 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     const realtimeEndpoint = @json(route('dashboard.realtime-stats'));
 
@@ -141,7 +145,7 @@
             labels: [],
             datasets: [
                 {
-                    label: 'RX (bps)',
+                    label: 'RX (Mbps)',
                     borderColor: '#0f172a',
                     backgroundColor: 'rgba(15, 23, 42, 0.08)',
                     borderWidth: 2,
@@ -150,7 +154,7 @@
                     pointRadius: 2
                 },
                 {
-                    label: 'TX (bps)',
+                    label: 'TX (Mbps)',
                     borderColor: '#2563eb',
                     backgroundColor: 'rgba(37, 99, 235, 0.08)',
                     borderWidth: 2,
@@ -164,11 +168,26 @@
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                y: { beginAtZero: true },
+                y: { beginAtZero: true,
+                    ticks: {
+                        callback: function(value){
+                            if (value >= 1000) return value.toFixed(2) + ' Gbps';
+                            return Number(value).toFixed(2) + ' Mbps';
+                        }
+                    }
+                },
                 x: { grid: { display: false } }
             },
             plugins: {
-                legend: { position: 'top', align: 'start' }
+                legend: { position: 'top', align: 'start' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const v = context.raw;
+                            return context.dataset.label + ': ' + Number(v).toFixed(2) + ' Mbps';
+                        }
+                    }
+                }
             }
         }
     });
@@ -192,8 +211,9 @@
     function updateTrafficChart(snapshot) {
         const timeLabel = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         trafficChart.data.labels.push(timeLabel);
-        trafficChart.data.datasets[0].data.push(snapshot.rx_bps ?? 0);
-        trafficChart.data.datasets[1].data.push(snapshot.tx_bps ?? 0);
+        // convert bps to Mbps for chart display
+        trafficChart.data.datasets[0].data.push((snapshot.rx_bps ?? 0) / 1000000);
+        trafficChart.data.datasets[1].data.push((snapshot.tx_bps ?? 0) / 1000000);
 
         if (trafficChart.data.labels.length > 20) {
             trafficChart.data.labels.shift();
@@ -238,6 +258,8 @@
         if (!isOffline) {
             updateTrafficChart(data);
         }
+                // ===== THRESHOLD CHECK & ALERT =====
+        handleTrafficThresholdAlert(data, isOffline);
     }
 
     async function loadRealtimeStats() {
@@ -267,7 +289,209 @@
         }
     }
 
+    // ===== THRESHOLD MANAGEMENT =====
+    let maxRxBps = 0; // 0 berarti alert mati
+    let maxTxBps = 0;
+    let lastAlertTime = 0; // Debounce flag
+    let isModalOpen = false;
+    const ALERT_DEBOUNCE_MS = 5000; // Jeda 5 detik antar alert
+    const ALERT_PERSIST_MS = 10 * 60 * 1000; // Persist alert across pages (10 minutes)
+
+    const THRESHOLD_STORAGE_KEY = 'trafficThresholds';
+
+    function saveThresholdsToLocalStorage() {
+        try {
+            const payload = { maxRxBps: Number(maxRxBps) || 0, maxTxBps: Number(maxTxBps) || 0 };
+            localStorage.setItem(THRESHOLD_STORAGE_KEY, JSON.stringify(payload));
+        } catch (e) {
+            console.warn('Gagal menyimpan thresholds ke localStorage', e);
+        }
+    }
+
+    function loadThresholdsFromLocalStorage() {
+        try {
+            const raw = localStorage.getItem(THRESHOLD_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed) {
+                maxRxBps = Number(parsed.maxRxBps) || 0;
+                maxTxBps = Number(parsed.maxTxBps) || 0;
+            }
+        } catch (e) {
+            console.warn('Gagal membaca thresholds dari localStorage', e);
+        }
+    }
+
+    function handleTrafficThresholdAlert(data, isOffline) {
+        if (isOffline || (maxRxBps <= 0 && maxTxBps <= 0)) {
+            return;
+        }
+
+        const currentTime = Date.now();
+        const rxExceed = maxRxBps > 0 && data.rx_bps > maxRxBps;
+        const txExceed = maxTxBps > 0 && data.tx_bps > maxTxBps;
+
+        if (!(rxExceed || txExceed) || (currentTime - lastAlertTime) <= ALERT_DEBOUNCE_MS) {
+            return;
+        }
+
+        const alertMsg = buildTrafficAlertMessage(data, rxExceed, txExceed);
+        const alertData = {
+            time: currentTime,
+            rxExceed: !!rxExceed,
+            txExceed: !!txExceed,
+            rx_bps: data.rx_bps || 0,
+            tx_bps: data.tx_bps || 0,
+            maxRxBps: maxRxBps || 0,
+            maxTxBps: maxTxBps || 0,
+            message: alertMsg,
+            expiresAt: currentTime + ALERT_PERSIST_MS,
+        };
+
+        persistTrafficAlert(alertData);
+        showTrafficWarningToast(data, rxExceed, txExceed);
+        lastAlertTime = currentTime;
+    }
+
+    function buildTrafficAlertMessage(data, rxExceed, txExceed) {
+        let alertMsg = '⚠️ Traffic Alert!\n\n';
+
+        if (rxExceed) {
+            alertMsg += `RX: ${formatTrafficValue(data.rx_bps)} (Threshold: ${(maxRxBps / 1000000).toFixed(0)} Mbps)\n`;
+        }
+
+        if (txExceed) {
+            alertMsg += `TX: ${formatTrafficValue(data.tx_bps)} (Threshold: ${(maxTxBps / 1000000).toFixed(0)} Mbps)`;
+        }
+
+        return alertMsg;
+    }
+
+    function persistTrafficAlert(alertData) {
+        try {
+            localStorage.setItem('trafficAlert', JSON.stringify(alertData));
+        } catch (e) {
+            console.warn('Gagal menyimpan alert ke localStorage', e);
+        }
+    }
+
+    function showTrafficWarningToast(data, rxExceed, txExceed) {
+        try {
+            const isMuted = localStorage.getItem('trafficAlertMuted') === '1';
+            if (isMuted || isModalOpen) {
+                return;
+            }
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Traffic Berlebih!',
+                text: (rxExceed ? `RX: ${formatTrafficValue(data.rx_bps)}` : '') + (txExceed ? (rxExceed ? ' / ' : '') + `TX: ${formatTrafficValue(data.tx_bps)}` : ''),
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                showCloseButton: true,
+                timer: 5000,
+                timerProgressBar: true,
+                didOpen: () => {
+                    try {
+                        const cb = Swal.getCloseButton();
+                        if (cb) {
+                            cb.addEventListener('click', function () {
+                                try {
+                                    localStorage.removeItem('trafficAlert');
+                                } catch (e) {}
+                            });
+                        }
+                    } catch (e) {}
+                }
+            });
+        } catch (e) {
+            console.warn('Error showing toast', e);
+        }
+    }
+
+    
+
+    // Event listener untuk tombol Set Alert Threshold
+    document.getElementById('btn-set-threshold')?.addEventListener('click', function() {
+        isModalOpen = true; // Kunci menyala
+
+        Swal.fire({
+            title: 'Atur Alert Threshold Traffic',
+            icon: 'info',
+            html: `
+                <div style="text-align: left;">
+                    <label class="form-label fw-bold mb-2 d-block">RX (Download) Threshold (Mbps):</label>
+                    <input type="number" id="swal-rx-threshold" class="form-control mb-3" placeholder="0 = Nonaktif" min="0" step="1">
+                    
+                    <label class="form-label fw-bold mb-2 d-block">TX (Upload) Threshold (Mbps):</label>
+                    <input type="number" id="swal-tx-threshold" class="form-control" placeholder="0 = Nonaktif" min="0" step="1">
+                    
+                    <small class="text-muted d-block mt-3">
+                        <strong>Tips:</strong> Masukkan 0 untuk menonaktifkan threshold. Alert akan muncul jika traffic melebihi batas yang ditetapkan.
+                    </small>
+                </div>
+            `,
+            confirmButtonText: 'Simpan',
+            cancelButtonText: 'Batal',
+            showCancelButton: true,
+            didClose: () => {
+                isModalOpen = false; // Kunci dilepas saat form tertutup (save/cancel)
+            },
+            didOpen: () => {
+                // Set nilai saat ini ke input field
+                document.getElementById('swal-rx-threshold').value = maxRxBps > 0 ? maxRxBps / 1000000 : '';
+                document.getElementById('swal-tx-threshold').value = maxTxBps > 0 ? maxTxBps / 1000000 : '';
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const rxMbps = parseFloat(document.getElementById('swal-rx-threshold').value) || 0;
+                const txMbps = parseFloat(document.getElementById('swal-tx-threshold').value) || 0;
+                
+                // Konversi Mbps ke bps (kalikan 1.000.000)
+                maxRxBps = rxMbps > 0 ? rxMbps * 1000000 : 0;
+                maxTxBps = txMbps > 0 ? txMbps * 1000000 : 0;
+                
+                // Update tampilan current threshold
+                updateThresholdDisplay();
+                // Persist thresholds so they survive page navigation
+                saveThresholdsToLocalStorage();
+                
+                // Tampilkan toast konfirmasi
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Threshold berhasil diatur',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 2000,
+                    timerProgressBar: true
+                });
+            }
+        });
+    });
+
+    function updateThresholdDisplay() {
+        const infoEl = document.getElementById('current-threshold-info');
+        if (!infoEl) return;
+        
+        if (maxRxBps === 0 && maxTxBps === 0) {
+            infoEl.textContent = 'Off';
+            infoEl.className = 'badge bg-secondary align-self-center small';
+        } else {
+            let displayText = '';
+            if (maxRxBps > 0) displayText += `RX: ${(maxRxBps / 1000000).toFixed(0)}M`;
+            if (maxTxBps > 0) displayText += (displayText ? ' / ' : '') + `TX: ${(maxTxBps / 1000000).toFixed(0)}M`;
+            infoEl.textContent = displayText;
+            infoEl.className = 'badge bg-danger align-self-center small';
+        }
+    }
+
+    // Load persisted thresholds and inisialisasi tampilan
+    loadThresholdsFromLocalStorage();
+    updateThresholdDisplay();
+
     loadRealtimeStats();
-    setInterval(loadRealtimeStats, 3000);
+    setInterval(loadRealtimeStats, 1000);
 </script>
 @endpush    

@@ -159,7 +159,7 @@
 
         <div class="struk-row">
             <span class="struk-label">Admin</span>
-            <span class="struk-value">{{ $pembayaran->admin->nama_admin ?? '-' }}</span>
+            <span class="struk-value">{{ $pembayaran->admin->nama_lengkap ?? $pembayaran->admin->username ?? '-' }}</span>
         </div>
 
         <!-- Divider -->
