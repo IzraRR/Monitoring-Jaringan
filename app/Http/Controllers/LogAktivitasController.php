@@ -42,7 +42,7 @@ class LogAktivitasController extends Controller
             [$startDate, $endDate] = [$start->toDateString(), $end->toDateString()];
         }
 
-        $logAktivitas = LogAktivitas::with('pelanggan.paket')
+        $logAktivitas = LogAktivitas::with(['pelanggan', 'paket'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->whereHas('pelanggan', function ($q) use ($search) {
                     $q->where('nama_pelanggan', 'like', "%{$search}%")

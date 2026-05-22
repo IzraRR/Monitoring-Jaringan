@@ -13,7 +13,20 @@ class Pelanggan extends Model
 
     protected $table = 'pelanggan';
     protected $primaryKey = 'id_pelanggan';
-    protected $guarded = [];
+
+    protected $fillable = [
+        'id_paket',
+        'nama_pelanggan',
+        'no_hp',
+        'username_mikrotik',
+        'password_mikrotik',
+        'masa_aktif',
+        'status_aktif',
+    ];
+
+    protected $hidden = [
+        'password_mikrotik',
+    ];
 
     protected $casts = [
         'masa_aktif' => 'date',

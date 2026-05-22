@@ -256,8 +256,11 @@
 @endphp
 
 <div class="app-shell">
-    <div class="d-flex gap-0">
-        <aside class="sidebar">
+    <div class="d-flex gap-0 flex-column flex-lg-row">
+        <button class="btn btn-light d-lg-none mx-2 mt-2 align-self-start" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarMenu" aria-expanded="false" aria-controls="sidebarMenu">
+            <i class="bi bi-list"></i> Menu
+        </button>
+        <aside id="sidebarMenu" class="sidebar collapse d-lg-block">
             <div class="sidebar-menu">
                 <a href="{{ url('/dashboard') }}" class="nav-link {{ request()->is('dashboard') ? 'active' : '' }}">
                     <i class="bi bi-grid-fill"></i><span>Dashboard</span>
@@ -303,6 +306,7 @@
             </div>
 
             <div class="content-panel">
+                @include('partials.flash-messages')
                 @yield('content')
             </div>
 
@@ -312,6 +316,21 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    document.querySelectorAll('.toggle-password').forEach(function (button) {
+        button.addEventListener('click', function () {
+            const input = document.getElementById(button.dataset.target);
+            if (!input) return;
+            const isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            const icon = button.querySelector('i');
+            if (icon) {
+                icon.classList.toggle('bi-eye', !isHidden);
+                icon.classList.toggle('bi-eye-slash', isHidden);
+            }
+        });
+    });
+</script>
 @include('partials.traffic-alert-utils')
 @include('partials.traffic-alert-monitor')
 @stack('scripts')

@@ -24,7 +24,12 @@
             </div>
             <div class="col-md-6">
                 <label class="form-label">Password MikroTik</label>
-                <input type="text" name="password_mikrotik" value="{{ old('password_mikrotik') }}" class="form-control" required>
+                @include('partials.password-input', [
+                    'id' => 'password-mikrotik-create',
+                    'name' => 'password_mikrotik',
+                    'value' => old('password_mikrotik'),
+                    'placeholder' => 'Password untuk user di router',
+                ])
             </div>
             <div class="col-md-6">
                 <label class="form-label">Paket</label>
@@ -44,6 +49,7 @@
                 <select name="status_aktif" class="form-select" required>
                     <option value="Aktif" @selected(old('status_aktif', 'Aktif') === 'Aktif')>Aktif</option>
                     <option value="Nonaktif" @selected(old('status_aktif') === 'Nonaktif')>Nonaktif</option>
+                    <option value="Locked" @selected(old('status_aktif') === 'Locked')>Locked</option>
                 </select>
             </div>
             <div class="col-12 d-flex gap-2">

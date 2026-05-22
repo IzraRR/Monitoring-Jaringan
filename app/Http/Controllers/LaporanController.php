@@ -63,7 +63,7 @@ class LaporanController extends Controller
             return (float) optional($pelanggan->paket)->harga;
         });
 
-        $transaksiLaporan = Pembayaran::with(['pelanggan.paket'])
+        $transaksiLaporan = Pembayaran::with(['pelanggan', 'paket'])
             ->selectRaw('id_pelanggan, SUM(nominal) as total_nominal, COUNT(id_pembayaran) as jumlah_transaksi, MAX(tanggal_bayar) as transaksi_terakhir')
             ->when($start, function ($query) use ($start) {
                 $query->whereDate('tanggal_bayar', '>=', $start->toDateString());
@@ -76,9 +76,10 @@ class LaporanController extends Controller
             ->paginate(10)
             ->withQueryString();
 
+        // PENTING: Join melalui pembayaran.id_paket (paket saat transaksi)
+        // bukan pelanggan.id_paket (paket saat ini)
         $pemasukanPerPaket = Pembayaran::query()
-            ->join('pelanggan', 'pembayaran.id_pelanggan', '=', 'pelanggan.id_pelanggan')
-            ->join('paket_bandwidth', 'pelanggan.id_paket', '=', 'paket_bandwidth.id_paket')
+            ->join('paket_bandwidth', 'pembayaran.id_paket', '=', 'paket_bandwidth.id_paket')
             ->selectRaw('paket_bandwidth.nama_paket as nama_paket, SUM(pembayaran.nominal) as total_nominal')
             ->when($start, function ($query) use ($start) {
                 $query->where('pembayaran.tanggal_bayar', '>=', $start->toDateString());
@@ -148,7 +149,7 @@ class LaporanController extends Controller
             }
         }
 
-        $riwayatPembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
+        $riwayatPembayaran = Pembayaran::with(['pelanggan', 'paket', 'admin'])
             ->when($start, function ($query) use ($start) {
                 $query->where('tanggal_bayar', '>=', $start->toDateString());
             })

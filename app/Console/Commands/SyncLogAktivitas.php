@@ -59,6 +59,7 @@ class SyncLogAktivitas extends Command
             $dataUsageMb = ($bytesIn + $bytesOut) / 1048576;
             $durasiMenit = $this->parseUptimeToMinutes((string) ($hotspotUser['uptime'] ?? '0s'));
             $isAnomali = $dataUsageMb > 1000;
+            $ipAddress = trim((string) ($hotspotUser['address'] ?? ''));
 
             $existingLog = LogAktivitas::query()
                 ->where('id_pelanggan', $pelanggan->id_pelanggan)
@@ -71,6 +72,7 @@ class SyncLogAktivitas extends Command
                     'data_usage_mb' => $dataUsageMb,
                     'durasi_menit' => $durasiMenit,
                     'is_anomali' => $isAnomali,
+                    'ip_address' => $ipAddress,
                 ]);
                 $updated++;
             } else {
@@ -80,7 +82,9 @@ class SyncLogAktivitas extends Command
                         'waktu_selesai' => null,
                     ],
                     [
+                        'id_paket' => $pelanggan->id_paket,
                         'waktu_mulai' => now(),
+                        'ip_address' => $ipAddress,
                         'data_usage_mb' => $dataUsageMb,
                         'durasi_menit' => $durasiMenit,
                         'is_anomali' => $isAnomali,

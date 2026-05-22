@@ -185,7 +185,7 @@
 
         <div class="struk-row">
             <span class="struk-label">Paket</span>
-            <span class="struk-value">{{ $pembayaran->pelanggan->paket->nama_paket ?? '-' }}</span>
+            <span class="struk-value">{{ $pembayaran->paket->nama_paket ?? '-' }}</span>
         </div>
 
         <!-- Divider -->

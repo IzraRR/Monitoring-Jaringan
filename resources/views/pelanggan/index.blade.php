@@ -4,18 +4,6 @@
 @section('page_heading', 'Kelola User & Pelanggan (Hotspot/PPPoE)')
 
 @section('content')
-@if (session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
-@endif
-
-@if (session('warning'))
-    <div class="alert alert-warning">{{ session('warning') }}</div>
-@endif
-
-@if ($errors->any())
-    <div class="alert alert-danger">{{ $errors->first() }}</div>
-@endif
-
 <div class="row g-3 mb-3">
     <div class="col-md-3">
         <div class="card border-0 shadow-sm rounded-3 h-100"><div class="card-body"><p class="text-secondary mb-1">Total Pelanggan</p><h4 class="fw-bold mb-0">{{ number_format($summary['total']) }}</h4></div></div>

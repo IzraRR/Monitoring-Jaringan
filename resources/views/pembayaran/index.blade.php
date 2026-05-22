@@ -4,18 +4,6 @@
 @section('page_heading', 'Dashboard | Pencatatan Pembayaran & Tagihan')
 
 @section('content')
-@if (session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
-@endif
-
-@if (session('warning'))
-    <div class="alert alert-warning">{{ session('warning') }}</div>
-@endif
-
-@if ($errors->any())
-    <div class="alert alert-danger">{{ $errors->first() }}</div>
-@endif
-
 <style>
     .payment-title {
         color: #19395f;

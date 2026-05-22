@@ -12,7 +12,16 @@ class Pembayaran extends Model
 
     protected $table = 'pembayaran';
     protected $primaryKey = 'id_pembayaran';
-    protected $guarded = [];
+
+    protected $fillable = [
+        'id_pelanggan',
+        'id_paket',
+        'id_admin',
+        'tanggal_bayar',
+        'nominal',
+        'periode_tagihan',
+        'status_notifikasi',
+    ];
 
     protected $casts = [
         'tanggal_bayar' => 'date',
@@ -22,6 +31,11 @@ class Pembayaran extends Model
     public function pelanggan(): BelongsTo
     {
         return $this->belongsTo(Pelanggan::class, 'id_pelanggan', 'id_pelanggan');
+    }
+
+    public function paket(): BelongsTo
+    {
+        return $this->belongsTo(PaketBandwidth::class, 'id_paket', 'id_paket');
     }
 
     public function admin(): BelongsTo

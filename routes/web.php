@@ -21,11 +21,17 @@ use App\Http\Controllers\PasswordController;
 */
 
 Route::get('/', function () {
-    return redirect()->route('dashboard');
+    if (session('status_login') === true) {
+        return redirect()->route('dashboard');
+    }
+
+    return redirect()->route('login.form');
 });
 
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login.form');
-Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
+Route::post('/login', [AuthController::class, 'login'])
+    ->middleware('throttle:5,1')
+    ->name('login.attempt');
 
 Route::middleware('admin.auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -43,4 +49,5 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/laporan/cetak', [LaporanController::class, 'cetakPdf'])->name('laporan.cetak');
     Route::get('/dashboard/realtime-stats', [DashboardController::class, 'getRealtimeStats'])->name('dashboard.realtime-stats');
     Route::get('/password', [PasswordController::class, 'index'])->name('password.index');
+    Route::post('/password', [PasswordController::class, 'update'])->name('password.update');
 });

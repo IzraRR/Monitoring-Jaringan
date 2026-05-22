@@ -36,8 +36,8 @@
                 <label class="form-label">Status Notifikasi</label>
                 <select name="status_notifikasi" class="form-select" required>
                     <option value="Pending" @selected(old('status_notifikasi', $pembayaran->status_notifikasi) === 'Pending')>Pending</option>
-                    <option value="Send" @selected(old('status_notifikasi', $pembayaran->status_notifikasi) === 'Send')>Send</option>
-                    <option value="Failed" @selected(old('status_notifikasi', $pembayaran->status_notifikasi) === 'Failed')>Failed</option>
+                    <option value="Terkirim" @selected(old('status_notifikasi', $pembayaran->status_notifikasi) === 'Terkirim')>Terkirim</option>
+                    <option value="Gagal" @selected(old('status_notifikasi', $pembayaran->status_notifikasi) === 'Gagal')>Gagal</option>
                 </select>
             </div>
             <div class="col-12 d-flex gap-2">

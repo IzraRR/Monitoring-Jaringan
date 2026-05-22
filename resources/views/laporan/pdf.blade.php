@@ -42,7 +42,7 @@
                 <tr>
                     <td>{{ $item->id_pembayaran }}</td>
                     <td>{{ $item->pelanggan->nama_pelanggan ?? '-' }}</td>
-                    <td>{{ $item->pelanggan->paket->nama_paket ?? '-' }}</td>
+                    <td>{{ $item->paket->nama_paket ?? '-' }}</td>
                     <td>{{ $item->periode_tagihan }}</td>
                     <td>{{ optional($item->tanggal_bayar)->format('d/m/Y') ?? '-' }}</td>
                     <td class="text-right">Rp {{ number_format($item->nominal, 0, ',', '.') }}</td>

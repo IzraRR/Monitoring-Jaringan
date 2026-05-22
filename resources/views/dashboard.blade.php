@@ -26,40 +26,37 @@
 @endphp
 <div class="row mb-4">
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-            <div class="card-body">
-                <p class="text-secondary mb-1">Pelanggan Aktif</p>
-                <h3 class="fw-bold text-dark mb-0">{{ number_format($stats['pelanggan_aktif']) }}</h3>
-                <small class="text-muted">dari {{ number_format($stats['total_pelanggan']) }} pelanggan</small>
-            </div>
-        </div>
+        <x-stat-card 
+            title="Pelanggan Aktif"
+            :value="number_format($stats['pelanggan_aktif'])"
+            :subtitle="'dari ' . number_format($stats['total_pelanggan']) . ' pelanggan'"
+            icon="bi-people-fill"
+        />
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-            <div class="card-body">
-                <p class="text-secondary mb-1">Log Hari Ini</p>
-                <h3 class="fw-bold text-dark mb-0">{{ number_format($stats['log_hari_ini']) }}</h3>
-                <small class="text-muted">aktivitas tercatat</small>
-            </div>
-        </div>
+        <x-stat-card 
+            title="Log Hari Ini"
+            :value="number_format($stats['log_hari_ini'])"
+            subtitle="aktivitas tercatat"
+            icon="bi-activity"
+        />
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-            <div class="card-body">
-                <p class="text-secondary mb-1">Pemasukan Bulan Ini</p>
-                <h3 class="fw-bold text-success mb-0">Rp {{ number_format($stats['pemasukan_bulan_ini'], 0, ',', '.') }}</h3>
-                <small class="text-muted">transaksi {{ now()->translatedFormat('F Y') }}</small>
-            </div>
-        </div>
+        <x-stat-card 
+            title="Pemasukan Bulan Ini"
+            :value="'Rp ' . number_format($stats['pemasukan_bulan_ini'], 0, ',', '.')"
+            :subtitle="'transaksi ' . now()->translatedFormat('F Y')"
+            value-class="text-success"
+            icon="bi-cash-stack"
+        />
     </div>
     <div class="col-md-3">
-        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-            <div class="card-body">
-                <p class="text-secondary mb-1">Total Paket Bandwidth</p>
-                <h3 class="fw-bold text-dark mb-0">{{ number_format($stats['total_paket']) }}</h3>
-                <small class="text-muted">profil tersedia</small>
-            </div>
-        </div>
+        <x-stat-card 
+            title="Total Paket Bandwidth"
+            :value="number_format($stats['total_paket'])"
+            subtitle="profil tersedia"
+            icon="bi-speedometer2"
+        />
     </div>
 </div>
 
@@ -109,7 +106,7 @@
                     <i id="mikrotik-status-dot" class="bi bi-circle-fill {{ $realtimeStats['connected'] ? 'text-success' : 'text-danger' }} fs-6 me-2"></i>
                     <span id="mikrotik-status-text" class="fw-bold text-dark">{{ $realtimeStats['connected'] ? 'TERHUBUNG' : 'OFFLINE' }}</span>
                 </div>
-                <small class="text-muted d-block">Host: {{ $mikrotik['host'] !== '' ? $mikrotik['host'] : '-' }}</small>
+                <small class="text-muted d-block">Router: {{ !empty($mikrotik['host']) ? 'Terhubung (dikonfigurasi)' : 'Belum dikonfigurasi' }}</small>
                 <small class="text-muted d-block">Identity: <span id="mikrotik-identity">{{ $realtimeStats['identity'] ?? $mikrotik['identity'] ?? '-' }}</span></small>
                 <small class="text-muted d-block">Uptime: <span id="mikrotik-uptime">{{ $realtimeStats['uptime'] ?? $mikrotik['uptime'] ?? 'Offline' }}</span></small>
                 <small class="text-muted d-block mb-2">CPU Load: <span id="mikrotik-cpu-load">{{ $realtimeStats['cpu_load'] !== null ? $realtimeStats['cpu_load'] . '%' : ($mikrotik['cpu_load'] !== null ? $mikrotik['cpu_load'] . '%' : '-') }}</span></small>
@@ -139,256 +136,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+    // Define endpoint untuk dashboard monitor
     const realtimeEndpoint = @json(route('dashboard.realtime-stats'));
-
-    const ctx = document.getElementById('trafficChart').getContext('2d');
-    const trafficChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [
-                {
-                    label: 'RX (Mbps)',
-                    borderColor: '#0f172a',
-                    backgroundColor: 'rgba(15, 23, 42, 0.08)',
-                    borderWidth: 2,
-                    data: [],
-                    tension: 0.1,
-                    pointRadius: 2
-                },
-                {
-                    label: 'TX (Mbps)',
-                    borderColor: '#2563eb',
-                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                    borderWidth: 2,
-                    data: [],
-                    tension: 0.1,
-                    pointRadius: 3
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: { beginAtZero: true,
-                    ticks: {
-                        callback: function(value){
-                            if (value >= 1000) return value.toFixed(2) + ' Gbps';
-                            return Number(value).toFixed(2) + ' Mbps';
-                        }
-                    }
-                },
-                x: { grid: { display: false } }
-            },
-            plugins: {
-                legend: { position: 'top', align: 'start' },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const v = context.raw;
-                            return context.dataset.label + ': ' + Number(v).toFixed(2) + ' Mbps';
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    function updateTrafficChart(snapshot) {
-        const timeLabel = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        trafficChart.data.labels.push(timeLabel);
-        // convert bps to Mbps for chart display
-        trafficChart.data.datasets[0].data.push((snapshot.rx_bps ?? 0) / 1000000);
-        trafficChart.data.datasets[1].data.push((snapshot.tx_bps ?? 0) / 1000000);
-
-        if (trafficChart.data.labels.length > 20) {
-            trafficChart.data.labels.shift();
-            trafficChart.data.datasets[0].data.shift();
-            trafficChart.data.datasets[1].data.shift();
-        }
-
-        trafficChart.update('none');
-    }
-
-    function updateRealtimeCards(data) {
-        const isOffline = data.status === 'offline';
-        const connected = !!data.connected;
-        const statusDot = document.getElementById('mikrotik-status-dot');
-        const statusText = document.getElementById('mikrotik-status-text');
-        const offlineMessage = document.getElementById('mikrotik-offline-message');
-
-        if (statusDot) {
-            statusDot.classList.remove('text-success', 'text-danger');
-            statusDot.classList.add(connected && !isOffline ? 'text-success' : 'text-danger');
-        }
-
-        if (statusText) {
-            statusText.textContent = connected && !isOffline ? 'TERHUBUNG' : 'OFFLINE';
-        }
-
-        const identityEl = document.getElementById('mikrotik-identity');
-        const uptimeEl = document.getElementById('mikrotik-uptime');
-        const cpuEl = document.getElementById('mikrotik-cpu-load');
-        const hotspotEl = document.getElementById('mikrotik-hotspot-active');
-        const pppoeEl = document.getElementById('mikrotik-pppoe-active');
-        const interfaceEl = document.getElementById('mikrotik-interface-name');
-
-        if (identityEl) identityEl.textContent = isOffline ? 'Offline' : (data.identity ?? '-');
-        if (uptimeEl) uptimeEl.textContent = isOffline ? 'Offline' : (data.uptime ?? '-');
-        if (cpuEl) cpuEl.textContent = isOffline ? 'Offline' : (data.cpu_load !== null && data.cpu_load !== undefined ? `${data.cpu_load}%` : '-');
-        if (hotspotEl) hotspotEl.textContent = isOffline ? '0' : Number(data.hotspot_active ?? 0).toLocaleString('id-ID');
-        if (pppoeEl) pppoeEl.textContent = isOffline ? '0' : Number(data.pppoe_active ?? 0).toLocaleString('id-ID');
-        if (interfaceEl) interfaceEl.textContent = isOffline ? '-' : (data.interface_name ?? '-');
-        if (offlineMessage) offlineMessage.classList.toggle('d-none', !isOffline);
-
-        if (!isOffline) {
-            updateTrafficChart(data);
-        }
-                // ===== THRESHOLD CHECK & ALERT =====
-        handleTrafficThresholdAlert(data, isOffline);
-    }
-
-    async function loadRealtimeStats() {
-        try {
-            const response = await fetch(realtimeEndpoint, {
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-
-            const payload = await response.json();
-            updateRealtimeCards(payload);
-        } catch (error) {
-            console.error('Gagal memuat statistik realtime dashboard:', error);
-            updateRealtimeCards({
-                status: 'offline',
-                connected: false,
-                identity: 'Offline',
-                uptime: 'Offline',
-                cpu_load: null,
-                hotspot_active: 0,
-                pppoe_active: 0,
-                interface_name: '-',
-                rx_bps: 0,
-                tx_bps: 0,
-            });
-        }
-    }
-
-    // ===== THRESHOLD MANAGEMENT =====
-    let maxRxBps = 0; // 0 berarti alert mati
-    let maxTxBps = 0;
-    let isModalOpen = false;
-
-    function loadThresholdsFromLocalStorage() {
-        const thresholds = window.TrafficAlertUtils?.loadThresholds?.() || { maxRxBps: 0, maxTxBps: 0 };
-        maxRxBps = Number(thresholds.maxRxBps) || 0;
-        maxTxBps = Number(thresholds.maxTxBps) || 0;
-    }
-
-    function saveThresholdsToLocalStorage() {
-        window.TrafficAlertUtils?.saveThresholds?.(maxRxBps, maxTxBps);
-    }
-
-    function updateAlertMuteDisplay() {
-        window.TrafficAlertUtils?.updateAlertMuteDisplay?.();
-    }
-
-    function toggleAlertMuteState() {
-        window.TrafficAlertUtils?.toggleAlertMuteState?.();
-        updateAlertMuteDisplay();
-    }
-
-    function handleTrafficThresholdAlert(data, isOffline) {
-        window.TrafficAlertUtils?.handleTrafficThresholdAlert?.(data, isOffline);
-    }
-
-    
-
-    // Event listener untuk tombol Set Alert Threshold
-    document.getElementById('btn-set-threshold')?.addEventListener('click', function() {
-        isModalOpen = true; // Kunci menyala
-
-        Swal.fire({
-            title: 'Atur Alert Threshold Traffic',
-            icon: 'info',
-            html: `
-                <div style="text-align: left;">
-                    <label class="form-label fw-bold mb-2 d-block">RX (Download) Threshold (Mbps):</label>
-                    <input type="number" id="swal-rx-threshold" class="form-control mb-3" placeholder="0 = Nonaktif" min="0" step="1">
-                    
-                    <label class="form-label fw-bold mb-2 d-block">TX (Upload) Threshold (Mbps):</label>
-                    <input type="number" id="swal-tx-threshold" class="form-control" placeholder="0 = Nonaktif" min="0" step="1">
-                    
-                    <small class="text-muted d-block mt-3">
-                        <strong>Tips:</strong> Masukkan 0 untuk menonaktifkan threshold. Alert akan muncul jika traffic melebihi batas yang ditetapkan.
-                    </small>
-                </div>
-            `,
-            confirmButtonText: 'Simpan',
-            cancelButtonText: 'Batal',
-            showCancelButton: true,
-            didClose: () => {
-                isModalOpen = false; // Kunci dilepas saat form tertutup (save/cancel)
-            },
-            didOpen: () => {
-                // Set nilai saat ini ke input field
-                document.getElementById('swal-rx-threshold').value = maxRxBps > 0 ? maxRxBps / 1000000 : '';
-                document.getElementById('swal-tx-threshold').value = maxTxBps > 0 ? maxTxBps / 1000000 : '';
-            }
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const rxMbps = parseFloat(document.getElementById('swal-rx-threshold').value) || 0;
-                const txMbps = parseFloat(document.getElementById('swal-tx-threshold').value) || 0;
-                
-                // Konversi Mbps ke bps (kalikan 1.000.000)
-                maxRxBps = rxMbps > 0 ? rxMbps * 1000000 : 0;
-                maxTxBps = txMbps > 0 ? txMbps * 1000000 : 0;
-                
-                // Update tampilan current threshold
-                updateThresholdDisplay();
-                // Persist thresholds so they survive page navigation
-                saveThresholdsToLocalStorage();
-                
-                // Tampilkan toast konfirmasi
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Threshold berhasil diatur',
-                    toast: true,
-                    position: 'top-end',
-                    showConfirmButton: false,
-                    timer: 2000,
-                    timerProgressBar: true
-                });
-            }
-        });
-    });
-
-    window.TrafficAlertUtils?.bindMuteToggle?.('#btn-toggle-alert-mute');
-
-    function updateThresholdDisplay() {
-        const infoEl = document.getElementById('current-threshold-info');
-        if (!infoEl) return;
-        
-        if (maxRxBps === 0 && maxTxBps === 0) {
-            infoEl.textContent = 'Off';
-            infoEl.className = 'badge bg-secondary align-self-center small';
-        } else {
-            let displayText = '';
-            if (maxRxBps > 0) displayText += `RX: ${(maxRxBps / 1000000).toFixed(0)}M`;
-            if (maxTxBps > 0) displayText += (displayText ? ' / ' : '') + `TX: ${(maxTxBps / 1000000).toFixed(0)}M`;
-            infoEl.textContent = displayText;
-            infoEl.className = 'badge bg-danger align-self-center small';
-        }
-    }
-
-    // Load persisted thresholds and inisialisasi tampilan
-    loadThresholdsFromLocalStorage();
-    updateThresholdDisplay();
-    updateAlertMuteDisplay();
-
-    loadRealtimeStats();
-    setInterval(loadRealtimeStats, 1000);
 </script>
-@endpush    
+<script src="{{ asset('js/dashboard.js') }}"></script>
+@endpush

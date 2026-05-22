@@ -12,7 +12,13 @@ class PaketBandwidth extends Model
 
     protected $table = 'paket_bandwidth';
     protected $primaryKey = 'id_paket';
-    protected $guarded = [];
+
+    protected $fillable = [
+        'nama_paket',
+        'limit_upload',
+        'limit_download',
+        'harga',
+    ];
 
     public function pelanggan(): HasMany
     {

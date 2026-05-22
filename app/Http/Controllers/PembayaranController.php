@@ -20,7 +20,7 @@ class PembayaranController extends Controller
     {
         $search = trim((string) $request->query('q', ''));
 
-        $pembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
+        $pembayaran = Pembayaran::with(['pelanggan', 'paket', 'admin'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($inner) use ($search) {
                     $inner->where('periode_tagihan', 'like', "%{$search}%")
@@ -70,7 +70,7 @@ class PembayaranController extends Controller
             'tanggal_bayar' => ['nullable', 'date'],
             'nominal' => ['required', 'numeric', 'min:0'],
             'periode_tagihan' => ['required', 'string', 'max:30'],
-            'status_notifikasi' => ['nullable', 'in:Pending,Send,Failed'],
+            'status_notifikasi' => ['nullable', 'in:Pending,Terkirim,Gagal'],
         ]);
 
         $validated['id_admin'] = $adminId;
@@ -89,9 +89,17 @@ class PembayaranController extends Controller
         }
         // ------------------------------
 
-        $pembayaran = Pembayaran::create($validated);
-
+        // Ambil data pelanggan dengan paket untuk mendapatkan id_paket saat ini
         $pelanggan = Pelanggan::with('paket')->find($validated['id_pelanggan']);
+
+        if (!$pelanggan) {
+            return redirect()->back()->withInput()->with('error', 'Pelanggan tidak ditemukan.');
+        }
+
+        // Simpan id_paket saat transaksi untuk history yang akurat
+        $validated['id_paket'] = $pelanggan->id_paket;
+
+        $pembayaran = Pembayaran::create($validated);
 
         if ($pelanggan) {
             $hargaPaket = (float) $pelanggan->paket->harga;
@@ -151,9 +159,12 @@ class PembayaranController extends Controller
 
                 if ($response->successful() && isset($response->json()['status']) && $response->json()['status'] == 'success') {
                     $pembayaran->update(['status_notifikasi' => 'Terkirim']);
+                } else {
+                    $pembayaran->update(['status_notifikasi' => 'Gagal']);
                 }
             } catch (\Exception $e) {
                 Log::error('Gagal kirim kwitansi WA: ' . $e->getMessage());
+                $pembayaran->update(['status_notifikasi' => 'Gagal']);
             }
         }
         // ----------------------------------
@@ -183,7 +194,7 @@ class PembayaranController extends Controller
             'tanggal_bayar' => ['required', 'date'],
             'nominal' => ['required', 'numeric', 'min:0'],
             'periode_tagihan' => ['required', 'string', 'max:30'],
-            'status_notifikasi' => ['required', 'in:Pending,Send,Failed'],
+            'status_notifikasi' => ['required', 'in:Pending,Terkirim,Gagal'],
         ]);
 
         $validated['id_admin'] = $adminId;
@@ -225,7 +236,7 @@ class PembayaranController extends Controller
 
     public function cetakStruk($id)
     {
-        $pembayaran = Pembayaran::with(['pelanggan.paket', 'admin'])
+        $pembayaran = Pembayaran::with(['pelanggan', 'paket', 'admin'])
             ->findOrFail($id);
 
         $pdf = Pdf::loadView('pembayaran.struk', compact('pembayaran'));

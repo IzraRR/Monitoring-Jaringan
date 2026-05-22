@@ -105,28 +105,69 @@ class PelangganController extends Controller
             'nama_pelanggan' => ['required', 'string', 'max:100'],
             'no_hp' => ['required', 'string', 'max:20'],
             'username_mikrotik' => ['required', 'string', 'max:50', 'unique:pelanggan,username_mikrotik,' . $pelanggan->id_pelanggan . ',id_pelanggan'],
-            'password_mikrotik' => ['required', 'string', 'max:50'],
+            'password_mikrotik' => ['nullable', 'string', 'max:50'],
             'masa_aktif' => ['nullable', 'date'],
             'status_aktif' => ['required', 'in:Aktif,Nonaktif,Locked'],
         ]);
 
+        if (empty($validated['password_mikrotik'])) {
+            unset($validated['password_mikrotik']);
+        }
+
         try {
+            // Simpan data lama SEBELUM update
             $oldUsername = $pelanggan->username_mikrotik;
-            $pelanggan->update($validated);
-            $pelanggan->refresh();
-
+            $oldIdPaket = $pelanggan->id_paket;
+            
+            // Deteksi tipe LAMA sebelum update
             $pelanggan->load('paket');
-
-            $tipePaket = 'Hotspot';
+            $oldTipePaket = 'Hotspot';
             if ($pelanggan->paket && stripos($pelanggan->paket->nama_paket, 'pppoe') !== false) {
-                $tipePaket = 'PPPoE';
+                $oldTipePaket = 'PPPoE';
             }
 
-            $sync = $mikrotikService->syncPelangganUpdatedByType($pelanggan, $oldUsername, $tipePaket);
+            // Update pelanggan dengan data baru
+            $pelanggan->update($validated);
+            $pelanggan->refresh();
+            $pelanggan->load('paket');
 
-            $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil diperbarui.');
-            if (!$sync['success']) {
-                $redirect->with('warning', $sync['message']);
+            // Deteksi tipe BARU setelah update
+            $newTipePaket = 'Hotspot';
+            if ($pelanggan->paket && stripos($pelanggan->paket->nama_paket, 'pppoe') !== false) {
+                $newTipePaket = 'PPPoE';
+            }
+
+            // Cek apakah ada perubahan tipe paket
+            $paketChanged = ($oldIdPaket != $validated['id_paket']);
+            $tipeChanged = ($oldTipePaket !== $newTipePaket);
+
+            if ($tipeChanged) {
+                // Jika tipe berubah (Hotspot <-> PPPoE), hapus dari tipe lama dan tambah ke tipe baru
+                Log::info("Pelanggan {$oldUsername} mengubah tipe: {$oldTipePaket} -> {$newTipePaket}");
+                
+                // Hapus dari tipe lama
+                $deleteSync = $mikrotikService->syncPelangganDeletedByType($oldUsername, $oldTipePaket);
+                if (!$deleteSync['success']) {
+                    Log::warning("Gagal hapus dari {$oldTipePaket}: " . $deleteSync['message']);
+                }
+                
+                // Tambah ke tipe baru
+                $addSync = $mikrotikService->syncPelangganCreatedByType($pelanggan, $newTipePaket);
+                
+                $redirect = redirect()->route('pelanggan.index')
+                    ->with('success', "Pelanggan berhasil diperbarui dan dipindahkan dari {$oldTipePaket} ke {$newTipePaket}.");
+                
+                if (!$addSync['success']) {
+                    $redirect->with('warning', $addSync['message']);
+                }
+            } else {
+                // Jika tipe sama, hanya update data
+                $sync = $mikrotikService->syncPelangganUpdatedByType($pelanggan, $oldUsername, $newTipePaket);
+                
+                $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil diperbarui.');
+                if (!$sync['success']) {
+                    $redirect->with('warning', $sync['message']);
+                }
             }
 
             return $redirect;

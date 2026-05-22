@@ -31,14 +31,6 @@
                 <label class="form-label">Periode Tagihan</label>
                 <input type="text" name="periode_tagihan" value="{{ old('periode_tagihan', now()->translatedFormat('F Y')) }}" class="form-control" required>
             </div>
-            <div class="col-md-4">
-                <label class="form-label">Status Notifikasi</label>
-                <select name="status_notifikasi" class="form-select" required>
-                    <option value="Pending" @selected(old('status_notifikasi', 'Pending') === 'Pending')>Pending</option>
-                    <option value="Send" @selected(old('status_notifikasi') === 'Send')>Send</option>
-                    <option value="Failed" @selected(old('status_notifikasi') === 'Failed')>Failed</option>
-                </select>
-            </div>
             <div class="col-12 d-flex gap-2">
                 <button type="submit" class="btn btn-dark">Simpan</button>
                 <a href="{{ route('pembayaran.index') }}" class="btn btn-outline-secondary">Kembali</a>
