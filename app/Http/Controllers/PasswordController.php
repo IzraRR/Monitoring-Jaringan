@@ -46,6 +46,9 @@ class PasswordController extends Controller
             'password' => Hash::make($validated['password_baru']),
         ]);
 
+        // Regenerasi session setelah ganti password untuk keamanan
+        $request->session()->regenerate();
+
         return redirect()->route('password.index')->with('success', 'Password berhasil diperbarui.');
     }
 }

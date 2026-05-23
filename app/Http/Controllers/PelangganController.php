@@ -81,12 +81,13 @@ class PelangganController extends Controller
 
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil ditambahkan.');
             if (!$sync['success']) {
-                $redirect->with('warning', $sync['message']);
+                $redirect = $redirect->with('warning', $sync['message']);
             }
 
             return $redirect;
         } catch (\Throwable $e) {
-            return redirect()->back()->withInput()->with('error', 'Gagal menambahkan pelanggan: ' . $e->getMessage());
+            Log::error('Gagal menambahkan pelanggan', ['error' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Gagal menambahkan pelanggan. Silakan coba lagi.');
         }
     }
 
@@ -158,7 +159,7 @@ class PelangganController extends Controller
                     ->with('success', "Pelanggan berhasil diperbarui dan dipindahkan dari {$oldTipePaket} ke {$newTipePaket}.");
                 
                 if (!$addSync['success']) {
-                    $redirect->with('warning', $addSync['message']);
+                    $redirect = $redirect->with('warning', $addSync['message']);
                 }
             } else {
                 // Jika tipe sama, hanya update data
@@ -166,13 +167,14 @@ class PelangganController extends Controller
                 
                 $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil diperbarui.');
                 if (!$sync['success']) {
-                    $redirect->with('warning', $sync['message']);
+                    $redirect = $redirect->with('warning', $sync['message']);
                 }
             }
 
             return $redirect;
         } catch (\Throwable $e) {
-            return redirect()->back()->withInput()->with('error', 'Gagal memperbarui pelanggan: ' . $e->getMessage());
+            Log::error('Gagal memperbarui pelanggan', ['error' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Gagal memperbarui pelanggan. Silakan coba lagi.');
         }
     }
 
@@ -189,12 +191,13 @@ class PelangganController extends Controller
 
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Pelanggan berhasil dihapus.');
             if (!$sync['success']) {
-                $redirect->with('warning', $sync['message']);
+                $redirect = $redirect->with('warning', $sync['message']);
             }
 
             return $redirect;
         } catch (\Throwable $e) {
-            return redirect()->back()->with('error', 'Gagal menghapus pelanggan: ' . $e->getMessage());
+            Log::error('Gagal menghapus pelanggan', ['error' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Gagal menghapus pelanggan. Silakan coba lagi.');
         }
     }
 
@@ -252,12 +255,13 @@ class PelangganController extends Controller
 
             $redirect = redirect()->route('pelanggan.index')->with('success', $message);
             if (!$sync['success']) {
-                $redirect->with('warning', $sync['message']);
+                $redirect = $redirect->with('warning', $sync['message']);
             }
 
             return $redirect;
         } catch (\Throwable $e) {
-            return redirect()->back()->with('error', 'Gagal mengubah status pelanggan di MikroTik: ' . $e->getMessage());
+            Log::error('Gagal mengubah status pelanggan di MikroTik', ['error' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Gagal mengubah status pelanggan. Silakan coba lagi.');
         }
     }
 
@@ -270,12 +274,13 @@ class PelangganController extends Controller
             $redirect = redirect()->route('pelanggan.index')->with('success', 'Sesi pelanggan berhasil diputus paksa (Kick).');
 
             if (!$syncDisconnect['success']) {
-                $redirect->with('warning', $syncDisconnect['message']);
+                $redirect = $redirect->with('warning', $syncDisconnect['message']);
             }
 
             return $redirect;
         } catch (\Throwable $e) {
-            return redirect()->back()->with('error', 'Gagal memutuskan sesi di MikroTik: ' . $e->getMessage());
+            Log::error('Gagal memutuskan sesi di MikroTik', ['error' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Gagal memutuskan sesi pelanggan. Silakan coba lagi.');
         }
     }
 }

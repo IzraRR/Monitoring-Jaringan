@@ -41,7 +41,15 @@ class SyncPelangganToMikrotikJob implements ShouldQueue
     public function handle(MikrotikService $mikrotikService, CacheService $cacheService): void
     {
         try {
-            $pelanggan = Pelanggan::with('paket')->findOrFail($this->pelangganId);
+            $pelanggan = Pelanggan::with('paket')->find($this->pelangganId);
+
+            if (!$pelanggan) {
+                Log::warning('MikroTik sync job: pelanggan not found, skipping', [
+                    'pelanggan_id' => $this->pelangganId,
+                    'action' => $this->action,
+                ]);
+                return;
+            }
 
             Log::info('Starting MikroTik sync job', [
                 'pelanggan_id' => $this->pelangganId,
@@ -51,10 +59,10 @@ class SyncPelangganToMikrotikJob implements ShouldQueue
 
             $result = match ($this->action) {
                 'create' => $mikrotikService->syncPelangganCreated($pelanggan),
-                'update' => $mikrotikService->syncPelangganUpdated($pelanggan),
-                'delete' => $mikrotikService->syncPelangganDeleted($pelanggan),
-                'lock' => $mikrotikService->toggleLockPelanggan($pelanggan->username_mikrotik, true),
-                'unlock' => $mikrotikService->toggleLockPelanggan($pelanggan->username_mikrotik, false),
+                'update' => $mikrotikService->syncPelangganUpdated($pelanggan, $pelanggan->username_mikrotik),
+                'delete' => $mikrotikService->syncPelangganDeleted($pelanggan->username_mikrotik),
+                'lock' => $mikrotikService->setPelangganState($pelanggan, false),
+                'unlock' => $mikrotikService->setPelangganState($pelanggan, true),
                 default => ['success' => false, 'message' => 'Invalid action']
             };
 

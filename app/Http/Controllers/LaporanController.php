@@ -4,42 +4,27 @@ namespace App\Http\Controllers;
 
 use App\Models\Pelanggan;
 use App\Models\Pembayaran;
+use App\Traits\ParsesDateRange;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class LaporanController extends Controller
 {
+    use ParsesDateRange;
     public function index(Request $request)
     {
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
-
-        $start = null;
-        $end = null;
-
-        if (is_string($startDate) && $startDate !== '') {
-            try {
-                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
-            } catch (\Throwable $e) {
-                $start = null;
-                $startDate = null;
-            }
-        }
-
-        if (is_string($endDate) && $endDate !== '') {
-            try {
-                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
-            } catch (\Throwable $e) {
-                $end = null;
-                $endDate = null;
-            }
-        }
-
-        if ($start && $end && $start->gt($end)) {
-            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
-            [$startDate, $endDate] = [$start->toDateString(), $end->toDateString()];
-        }
+        $dates = $this->parseDateRange(
+            $request->query('start_date'),
+            $request->query('end_date')
+        );
+        $start = $dates['start'];
+        $end = $dates['end'];
+        $startDate = $dates['startDate'];
+        $endDate = $dates['endDate'];
 
         $pembayaranQuery = Pembayaran::query()
             ->when($start, function ($query) use ($start) {
@@ -127,27 +112,12 @@ class LaporanController extends Controller
 
     public function cetakPdf(Request $request)
     {
-        $startDate = $request->query('start_date');
-        $endDate = $request->query('end_date');
-
-        $start = null;
-        $end = null;
-
-        if (is_string($startDate) && $startDate !== '') {
-            try {
-                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
-            } catch (\Throwable $e) {
-                $start = null;
-            }
-        }
-
-        if (is_string($endDate) && $endDate !== '') {
-            try {
-                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
-            } catch (\Throwable $e) {
-                $end = null;
-            }
-        }
+        $dates = $this->parseDateRange(
+            $request->query('start_date'),
+            $request->query('end_date')
+        );
+        $start = $dates['start'];
+        $end = $dates['end'];
 
         $riwayatPembayaran = Pembayaran::with(['pelanggan', 'paket', 'admin'])
             ->when($start, function ($query) use ($start) {
@@ -174,5 +144,150 @@ class LaporanController extends Controller
         ]);
 
         return $pdf->download('laporan-pembayaran.pdf');
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $dates = $this->parseDateRange(
+            $request->query('start_date'),
+            $request->query('end_date')
+        );
+        $start = $dates['start'];
+        $end = $dates['end'];
+
+        $riwayatPembayaran = Pembayaran::with(['pelanggan', 'paket', 'admin'])
+            ->when($start, function ($query) use ($start) {
+                $query->where('tanggal_bayar', '>=', $start->toDateString());
+            })
+            ->when($end, function ($query) use ($end) {
+                $query->where('tanggal_bayar', '<=', $end->toDateString());
+            })
+            ->latest('tanggal_bayar')
+            ->get();
+
+        $fileName = 'laporan-pembayaran-' . now()->format('Y-m-d-His') . '.csv';
+
+        $headers = [
+            "Content-type"        => "text/csv; charset=UTF-8",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $columns = ['No', 'Tanggal Bayar', 'Nama Pelanggan', 'Paket Bandwidth', 'Nominal (Rp)', 'Periode Tagihan', 'Status Notifikasi', 'Penerima Pembayaran (Admin)'];
+
+        $callback = function() use($riwayatPembayaran, $columns) {
+            $file = fopen('php://output', 'w');
+            
+            // Add UTF-8 BOM to make Excel display international characters properly
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+            
+            // Semicolon separator is highly compatible with Excel in Indonesian locale settings
+            fputcsv($file, $columns, ';');
+
+            $no = 1;
+            foreach ($riwayatPembayaran as $row) {
+                fputcsv($file, [
+                    $no++,
+                    $row->tanggal_bayar ? $row->tanggal_bayar->format('d-m-Y') : '-',
+                    $row->pelanggan->nama_pelanggan ?? '-',
+                    $row->paket->nama_paket ?? '-',
+                    $row->nominal,
+                    $row->periode_tagihan,
+                    $row->status_notifikasi,
+                    $row->admin->nama_lengkap ?? '-'
+                ], ';');
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function cetakPdfSigned(Request $request)
+    {
+        return $this->cetakPdf($request);
+    }
+
+    public function kirimOwner(Request $request)
+    {
+        $dates = $this->parseDateRange(
+            $request->query('start_date'),
+            $request->query('end_date')
+        );
+        $start = $dates['start'];
+        $end = $dates['end'];
+
+        $pembayaranQuery = Pembayaran::query()
+            ->when($start, function ($query) use ($start) {
+                $query->where('tanggal_bayar', '>=', $start->toDateString());
+            })
+            ->when($end, function ($query) use ($end) {
+                $query->where('tanggal_bayar', '<=', $end->toDateString());
+            });
+
+        $totalPemasukan = $pembayaranQuery->sum('nominal');
+
+        $periodLabel = $start && $end
+            ? $start->translatedFormat('d F Y') . ' - ' . $end->translatedFormat('d F Y')
+            : ($start ? $start->translatedFormat('d F Y') : ($end ? $end->translatedFormat('d F Y') : 'Seluruh Periode'));
+
+        $whatsappConfig = config('services.whatsapp');
+        $ownerNumber = $whatsappConfig['owner_number'] ?? env('OWNER_WA_NUMBER');
+
+        if (empty($ownerNumber)) {
+            return redirect()->back()->with('error', 'Nomor WhatsApp Owner belum diatur di .env (OWNER_WA_NUMBER).');
+        }
+
+        // Normalize owner number
+        if (str_starts_with($ownerNumber, '0')) {
+            $ownerNumber = '62' . substr($ownerNumber, 1);
+        }
+
+        // Generate signed URL valid for 7 days
+        $pdfUrl = URL::temporarySignedRoute(
+            'laporan.cetak.signed',
+            now()->addDays(7),
+            $request->only('start_date', 'end_date')
+        );
+
+        $laporanUrl = route('laporan.index');
+
+        $pesan = "*LAPORAN KEUANGAN SMKN 53 JAKARTA*\n\n";
+        $pesan .= "Halo Bapak/Ibu Owner,\n";
+        $pesan .= "Berikut adalah Laporan Keuangan terbaru yang dikirimkan oleh Administrator.\n\n";
+        $pesan .= "Periode: *{$periodLabel}*\n";
+        $pesan .= "Total Pemasukan: *Rp " . number_format($totalPemasukan, 0, ',', '.') . "*\n\n";
+        $pesan .= "Silakan klik link di bawah ini untuk mengunduh laporan PDF secara langsung (tautan valid selama 7 hari):\n";
+        $pesan .= "{$pdfUrl}\n\n";
+        $pesan .= "Atau akses dashboard laporan keuangan melalui tautan berikut:\n";
+        $pesan .= "{$laporanUrl}\n\n";
+        $pesan .= "Terima kasih.";
+
+        if (!$whatsappConfig || !$whatsappConfig['enabled'] || empty($whatsappConfig['token']) || empty($whatsappConfig['url'])) {
+            return redirect()->back()->with('error', 'Fungsi WhatsApp Gateway (Fonnte) belum diaktifkan atau dikonfigurasi di .env.');
+        }
+
+        try {
+            $response = Http::asForm()
+                ->withHeaders([
+                    'Authorization' => $whatsappConfig['token'],
+                ])->post($whatsappConfig['url'], [
+                    'target' => $ownerNumber,
+                    'message' => $pesan,
+                ]);
+
+            if ($response->successful() && isset($response->json()['status']) && $response->json()['status'] == 'success') {
+                return redirect()->back()->with('success', 'Laporan berhasil dibuat dan dikirimkan ke WhatsApp Owner!');
+            } else {
+                $reason = $response->json()['reason'] ?? 'Gagal mengirim pesan via WhatsApp Gateway.';
+                return redirect()->back()->with('error', 'Gagal mengirim WhatsApp: ' . $reason);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Gagal mengirim laporan ke Owner', ['error' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Terjadi kesalahan sistem saat mengirim laporan: ' . $e->getMessage());
+        }
     }
 }

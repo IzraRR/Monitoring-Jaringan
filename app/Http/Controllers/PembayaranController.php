@@ -89,45 +89,63 @@ class PembayaranController extends Controller
         }
         // ------------------------------
 
-        // Ambil data pelanggan dengan paket untuk mendapatkan id_paket saat ini
+        // Ambil data pelanggan dengan paket
         $pelanggan = Pelanggan::with('paket')->find($validated['id_pelanggan']);
 
         if (!$pelanggan) {
             return redirect()->back()->withInput()->with('error', 'Pelanggan tidak ditemukan.');
         }
 
+        // Validasi harga paket SEBELUM membuat record (cegah division by zero)
+        $hargaPaket = (float) ($pelanggan->paket->harga ?? 0);
+
+        if ($hargaPaket <= 0) {
+            return redirect()->back()->withInput()->with('error', 'Harga paket tidak valid (Rp 0). Pastikan paket pelanggan memiliki harga.');
+        }
+
+        $jumlahBulan = (int) floor((float) $request->nominal / $hargaPaket);
+
+        if ($jumlahBulan < 1) {
+            return redirect()->back()->withInput()->with('error', 'Nominal uang tidak mencukupi untuk harga paket ini.');
+        }
+
         // Simpan id_paket saat transaksi untuk history yang akurat
         $validated['id_paket'] = $pelanggan->id_paket;
 
-        $pembayaran = Pembayaran::create($validated);
+        // Gunakan DB transaction untuk konsistensi data
+        $pembayaran = null;
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $pelanggan, $jumlahBulan, &$pembayaran) {
+                $pembayaran = Pembayaran::create($validated);
 
-        if ($pelanggan) {
-            $hargaPaket = (float) $pelanggan->paket->harga;
-            $jumlahBulan = (int) floor((float) $request->nominal / $hargaPaket);
+                $currentMasaAktif = $pelanggan->masa_aktif ? Carbon::parse($pelanggan->masa_aktif) : now();
 
-            if ($jumlahBulan < 1) {
-                return redirect()->back()->withInput()->with('error', 'Nominal uang tidak mencukupi untuk harga paket ini.');
-            }
+                if ($currentMasaAktif->isPast()) {
+                    $newMasaAktif = now()->addMonths($jumlahBulan);
+                } else {
+                    $newMasaAktif = $currentMasaAktif->addMonths($jumlahBulan);
+                }
 
-            $currentMasaAktif = $pelanggan->masa_aktif ? Carbon::parse($pelanggan->masa_aktif) : now();
+                $pelanggan->update([
+                    'masa_aktif' => $newMasaAktif->toDateString(),
+                    'status_aktif' => 'Aktif',
+                ]);
+            });
+        } catch (\Throwable $e) {
+            Log::error('Gagal menyimpan pembayaran', ['error' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Terjadi kesalahan saat menyimpan pembayaran. Silakan coba lagi.');
+        }
 
-            if ($currentMasaAktif->isPast()) {
-                $newMasaAktif = now()->addMonths($jumlahBulan);
-            } else {
-                $newMasaAktif = $currentMasaAktif->addMonths($jumlahBulan);
-            }
+        // MikroTik sync (di luar transaction — non-critical)
+        $tipePaket = 'Hotspot';
+        if ($pelanggan->paket && stripos((string) $pelanggan->paket->nama_paket, 'pppoe') !== false) {
+            $tipePaket = 'PPPoE';
+        }
 
-            $pelanggan->update([
-                'masa_aktif' => $newMasaAktif->toDateString(),
-                'status_aktif' => 'Aktif',
-            ]);
-
-            $tipePaket = 'Hotspot';
-            if ($pelanggan->paket && stripos((string) $pelanggan->paket->nama_paket, 'pppoe') !== false) {
-                $tipePaket = 'PPPoE';
-            }
-
+        try {
             $mikrotikService->setPelangganStateByType($pelanggan, true, $tipePaket);
+        } catch (\Throwable $e) {
+            Log::warning('MikroTik sync gagal setelah pembayaran', ['error' => $e->getMessage()]);
         }
 
         // --- KIRIM KWITANSI WA LANGSUNG ---
@@ -211,7 +229,7 @@ class PembayaranController extends Controller
         return redirect()->route('pembayaran.index')->with('success', 'Pembayaran berhasil dihapus.');
     }
 
-    public function sendNotifications(): RedirectResponse
+    public function sendNotifications(Request $request)
     {
         try {
             Artisan::call('app:kirim-tagihan-wa');
@@ -223,14 +241,30 @@ class PembayaranController extends Controller
                 'output' => $terminalLog,
             ]);
 
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Pengingat notifikasi tagihan selesai dijalankan.',
+                    'terminal_log' => $terminalLog,
+                ]);
+            }
+
             return back()
                 ->with('success', 'Pengingat notifikasi tagihan selesai dijalankan, cek log untuk detail.')
                 ->with('terminal_log', $terminalLog);
         } catch (\Throwable $e) {
             Log::error('Error saat menjalankan kirim tagihan command: ' . $e->getMessage());
 
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Terjadi error saat menjalankan proses notifikasi.',
+                    'terminal_log' => 'Error: Terjadi kesalahan saat menjalankan proses notifikasi. Silakan cek log server untuk detail.',
+                ], 500);
+            }
+
             return back()
-                ->with('danger', 'Terjadi error saat menjalankan proses: ' . $e->getMessage());
+                ->with('danger', 'Terjadi error saat menjalankan proses notifikasi. Silakan cek log untuk detail.');
         }
     }
 

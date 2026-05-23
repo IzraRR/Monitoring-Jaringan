@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pembayaran extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $table = 'pembayaran';
     protected $primaryKey = 'id_pembayaran';
@@ -25,7 +26,7 @@ class Pembayaran extends Model
 
     protected $casts = [
         'tanggal_bayar' => 'date',
-        'nominal' => 'float',
+        'nominal' => 'decimal:0',
     ];
 
     public function pelanggan(): BelongsTo

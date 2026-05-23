@@ -16,7 +16,13 @@ class EnsureAdminAuthenticated
         }
 
         $adminId = (int) $request->session()->get('admin_id');
-        if ($adminId <= 0 || !Admin::where('id_admin', $adminId)->exists()) {
+        
+        $adminExists = \Illuminate\Support\Facades\Cache::remember("admin_exists_{$adminId}", 300, function () use ($adminId) {
+            return Admin::where('id_admin', $adminId)->exists();
+        });
+
+        if ($adminId <= 0 || !$adminExists) {
+            \Illuminate\Support\Facades\Cache::forget("admin_exists_{$adminId}");
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 

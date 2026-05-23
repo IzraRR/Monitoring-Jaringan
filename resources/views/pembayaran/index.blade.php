@@ -134,15 +134,14 @@
         <div class="card payment-card h-100">
             <div class="card-body p-3 p-md-4">
                 <div class="card-title">Kontrol Notifikasi (WA)</div>
-                <form action="{{ route('pembayaran.send-notifications') }}" method="POST" class="mb-3">
+                <form id="formNotifikasi" action="{{ route('pembayaran.send-notifications') }}" method="POST" class="mb-3">
                     @csrf
-                    <button type="submit" class="btn secondary-btn w-100 py-2">KIRIM NOTIFIKASI TAGIHAN</button>
+                    <button type="submit" id="btnKirimNotifikasi" class="btn secondary-btn w-100 py-2">KIRIM NOTIFIKASI TAGIHAN</button>
                 </form>
 
                 <small class="text-muted d-block mt-2">Generate & Kirim via WhatsApp</small>
-                <div class="mt-2 p-2 bg-light border rounded" style="max-height: 150px; overflow-y: auto;">
-                    <small class="text-success fw-bold d-block" style="white-space: pre-line;">Log status:
-{{ session('terminal_log') ?? '-' }}</small>
+                <div id="notifikasi-log-container" class="mt-2 p-2 border rounded" style="max-height: 200px; overflow-y: auto; background-color: #0f172a;">
+                    <pre id="notifikasi-log-content" class="mb-0 small" style="white-space: pre-wrap; word-break: break-word; color: #94a3b8; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem;">@if(session('terminal_log')){{ session('terminal_log') }}@else<span class="text-secondary">Menunggu perintah...</span>@endif</pre>
                 </div>
             </div>
         </div>
@@ -466,6 +465,95 @@
                     lastSubmittedValue = currentValue;
                     refreshPaymentTable(currentValue);
                 }, 350);
+            });
+        }
+
+        // === AJAX Notification Form Handler ===
+        const formNotifikasi = document.getElementById('formNotifikasi');
+        const btnKirimNotifikasi = document.getElementById('btnKirimNotifikasi');
+        const logContent = document.getElementById('notifikasi-log-content');
+        const logContainer = document.getElementById('notifikasi-log-container');
+
+        function appendLog(text, color = '#94a3b8') {
+            if (!logContent) return;
+            const now = new Date();
+            const timestamp = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const entry = document.createElement('div');
+            entry.style.color = color;
+            entry.textContent = `[${timestamp}] ${text}`;
+            logContent.appendChild(entry);
+            if (logContainer) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        function setLogOutput(text, color = '#94a3b8') {
+            if (!logContent) return;
+            logContent.innerHTML = '';
+            const lines = text.split('\n');
+            lines.forEach(line => {
+                if (line.trim() === '') return;
+                const entry = document.createElement('div');
+                entry.style.color = color;
+                entry.textContent = line;
+                logContent.appendChild(entry);
+            });
+            if (logContainer) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+
+        if (formNotifikasi) {
+            formNotifikasi.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                if (btnKirimNotifikasi) {
+                    btnKirimNotifikasi.disabled = true;
+                    btnKirimNotifikasi.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengirim...';
+                }
+
+                // Clear log and show loading
+                if (logContent) {
+                    logContent.innerHTML = '';
+                }
+                appendLog('Memproses pengiriman notifikasi tagihan...', '#38bdf8');
+                appendLog('Mohon tunggu, proses ini memerlukan beberapa saat.', '#64748b');
+
+                try {
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                                   || formNotifikasi.querySelector('input[name="_token"]')?.value;
+
+                    const response = await fetch(formNotifikasi.action, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        appendLog('─'.repeat(40), '#475569');
+                        setLogOutput(data.terminal_log, '#4ade80');
+                        appendLog('─'.repeat(40), '#475569');
+                        appendLog('✅ Proses selesai.', '#4ade80');
+                    } else {
+                        appendLog('─'.repeat(40), '#475569');
+                        setLogOutput(data.terminal_log || data.message, '#f87171');
+                        appendLog('─'.repeat(40), '#475569');
+                        appendLog('❌ Proses gagal.', '#f87171');
+                    }
+                } catch (error) {
+                    console.error('Error sending notification:', error);
+                    appendLog('❌ Gagal menghubungi server: ' + error.message, '#f87171');
+                } finally {
+                    if (btnKirimNotifikasi) {
+                        btnKirimNotifikasi.disabled = false;
+                        btnKirimNotifikasi.innerHTML = 'KIRIM NOTIFIKASI TAGIHAN';
+                    }
+                }
             });
         }
     });

@@ -35,6 +35,7 @@ class CacheService
     public function remember(string $key, int $ttl, callable $callback)
     {
         try {
+            $this->registerKey($key);
             return Cache::remember($key, $ttl, $callback);
         } catch (\Exception $e) {
             Log::warning('Cache remember failed', [
@@ -77,6 +78,7 @@ class CacheService
     public function put(string $key, $value, int $ttl): bool
     {
         try {
+            $this->registerKey($key);
             return Cache::put($key, $value, $ttl);
         } catch (\Exception $e) {
             Log::warning('Cache put failed', [
@@ -115,16 +117,39 @@ class CacheService
     public function flushByPrefix(string $prefix): void
     {
         try {
-            $keys = Cache::get('cache_keys_' . $prefix, []);
+            $trackerKey = 'cache_keys_' . $prefix;
+            $keys = Cache::get($trackerKey, []);
             foreach ($keys as $key) {
                 Cache::forget($key);
             }
-            Cache::forget('cache_keys_' . $prefix);
+            Cache::forget($trackerKey);
         } catch (\Exception $e) {
             Log::warning('Cache flush by prefix failed', [
                 'prefix' => $prefix,
                 'error' => $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Register a cache key under its prefix for later flushing.
+     *
+     * @param string $key
+     * @return void
+     */
+    private function registerKey(string $key): void
+    {
+        $prefix = explode(':', $key)[0] ?? $key;
+        $trackerKey = 'cache_keys_' . $prefix;
+
+        try {
+            $keys = Cache::get($trackerKey, []);
+            if (!in_array($key, $keys, true)) {
+                $keys[] = $key;
+                Cache::put($trackerKey, $keys, self::CACHE_VERY_LONG);
+            }
+        } catch (\Exception $e) {
+            // Silently fail — key tracking is non-critical
         }
     }
 

@@ -30,6 +30,7 @@ class Pelanggan extends Model
 
     protected $casts = [
         'masa_aktif' => 'date',
+        'password_mikrotik' => 'encrypted',
     ];
 
     public function paket(): BelongsTo

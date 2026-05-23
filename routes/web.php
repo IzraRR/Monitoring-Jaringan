@@ -33,7 +33,7 @@ Route::post('/login', [AuthController::class, 'login'])
     ->middleware('throttle:5,1')
     ->name('login.attempt');
 
-Route::middleware('admin.auth')->group(function () {
+Route::middleware(['admin.auth', 'admin.role'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::resource('pelanggan', PelangganController::class)->except(['show']);
@@ -47,7 +47,13 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/log', [LogAktivitasController::class, 'index'])->name('log.index');
     Route::get('/laporan', [LaporanController::class, 'index'])->name('laporan.index');
     Route::get('/laporan/cetak', [LaporanController::class, 'cetakPdf'])->name('laporan.cetak');
+    Route::get('/laporan/export-excel', [LaporanController::class, 'exportExcel'])->name('laporan.export-excel');
+    Route::post('/laporan/kirim-owner', [LaporanController::class, 'kirimOwner'])->name('laporan.kirim-owner');
     Route::get('/dashboard/realtime-stats', [DashboardController::class, 'getRealtimeStats'])->name('dashboard.realtime-stats');
     Route::get('/password', [PasswordController::class, 'index'])->name('password.index');
     Route::post('/password', [PasswordController::class, 'update'])->name('password.update');
 });
+
+Route::get('/laporan/cetak/signed', [LaporanController::class, 'cetakPdfSigned'])
+    ->name('laporan.cetak.signed')
+    ->middleware('signed');

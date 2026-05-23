@@ -74,9 +74,7 @@ class BandwidthController extends Controller
         $validated['limit_download'] = $this->normalizeRateInput($validated['limit_download']);
         $validated['limit_upload'] = $this->normalizeRateInput($validated['limit_upload']);
 
-        PaketBandwidth::create($validated);
-
-        $paket = PaketBandwidth::latest('id_paket')->first();
+        $paket = PaketBandwidth::create($validated);
         $namaPaket = strtolower(trim($validated['nama_paket']));
 
         try {
@@ -86,12 +84,13 @@ class BandwidthController extends Controller
                 $sync = $mikrotikService->tambahProfilHotspot($paket);
             }
         } catch (\Throwable $e) {
-            $sync = ['success' => false, 'message' => $e->getMessage()];
+            \Illuminate\Support\Facades\Log::warning('MikroTik sync gagal saat tambah bandwidth', ['error' => $e->getMessage()]);
+            $sync = ['success' => false, 'message' => 'Gagal sinkronisasi profil ke MikroTik. Silakan cek koneksi router.'];
         }
 
         $redirect = redirect()->route('bandwidth.index')->with('success', 'Paket bandwidth berhasil ditambahkan.');
         if (!empty($sync) && !$sync['success']) {
-            $redirect->with('warning', $sync['message']);
+            $redirect = $redirect->with('warning', $sync['message']);
         }
 
         return $redirect;
@@ -131,7 +130,8 @@ class BandwidthController extends Controller
                 $sync = $mikrotikService->tambahProfilHotspot($fresh);
             }
         } catch (\Throwable $e) {
-            $sync = ['success' => false, 'message' => $e->getMessage()];
+            \Illuminate\Support\Facades\Log::warning('MikroTik sync gagal saat update bandwidth', ['error' => $e->getMessage()]);
+            $sync = ['success' => false, 'message' => 'Gagal sinkronisasi profil ke MikroTik. Silakan cek koneksi router.'];
         }
 
         if ($oldProfileName !== $fresh->nama_paket) {
@@ -143,7 +143,8 @@ class BandwidthController extends Controller
                     $removeOld = $mikrotikService->removeProfileIfUnusedByType($oldProfileName, 'Hotspot');
                 }
             } catch (\Throwable $e) {
-                $removeOld = ['success' => false, 'message' => $e->getMessage()];
+                \Illuminate\Support\Facades\Log::warning('MikroTik gagal hapus profil lama', ['error' => $e->getMessage()]);
+                $removeOld = ['success' => false, 'message' => 'Gagal menghapus profil lama dari MikroTik.'];
             }
 
             if (!$removeOld['success']) {
@@ -153,7 +154,7 @@ class BandwidthController extends Controller
 
         $redirect = redirect()->route('bandwidth.index')->with('success', 'Paket bandwidth berhasil diperbarui.');
         if (!empty($sync) && !$sync['success']) {
-            $redirect->with('warning', $sync['message']);
+            $redirect = $redirect->with('warning', $sync['message']);
         }
 
         return $redirect;
@@ -179,12 +180,13 @@ class BandwidthController extends Controller
                 $sync = $mikrotikService->removeProfileIfUnusedByType($profileName, 'Hotspot');
             }
         } catch (\Throwable $e) {
-            $sync = ['success' => false, 'message' => $e->getMessage()];
+            \Illuminate\Support\Facades\Log::warning('MikroTik sync gagal saat hapus bandwidth', ['error' => $e->getMessage()]);
+            $sync = ['success' => false, 'message' => 'Gagal menghapus profil dari MikroTik. Silakan cek koneksi router.'];
         }
 
         $redirect = redirect()->route('bandwidth.index')->with('success', 'Paket bandwidth berhasil dihapus.');
         if (!empty($sync) && !$sync['success']) {
-            $redirect->with('warning', $sync['message']);
+            $redirect = $redirect->with('warning', $sync['message']);
         }
 
         return $redirect;

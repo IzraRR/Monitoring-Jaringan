@@ -114,7 +114,7 @@ trait HandlesErrors
         $redirect = redirect()->back()->withInput()->with('error', $message);
 
         if (!empty($errors)) {
-            $redirect->withErrors($errors);
+            $redirect = $redirect->withErrors($errors);
         }
 
         return $redirect;

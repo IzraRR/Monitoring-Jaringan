@@ -21,10 +21,25 @@ class SyncLogAktivitas extends Command
             return Command::SUCCESS;
         }
 
-        $sessions = $mikrotikService->comm('/ip/hotspot/active/print') ?: [];
+        // Lama: hanya membaca hotspot aktif
+        // $sessions = $mikrotikService->comm('/ip/hotspot/active/print') ?: [];
+
+        // Baru: baca kedua sumber sesi (Hotspot + PPPoE) sehingga PPPoE juga tercatat
+        $hotspotSessions = $mikrotikService->comm('/ip/hotspot/active/print') ?: [];
+        $pppoeSessions = $mikrotikService->comm('/ppp/active/print') ?: [];
+
+        $sessions = [];
+
+        foreach ($hotspotSessions as $s) {
+            $sessions[] = ['type' => 'Hotspot', 'raw' => $s];
+        }
+
+        foreach ($pppoeSessions as $s) {
+            $sessions[] = ['type' => 'PPPoE', 'raw' => $s];
+        }
 
         if (empty($sessions)) {
-            $this->info('Tidak ada sesi hotspot aktif yang ditemukan.');
+            $this->info('Tidak ada sesi aktif (Hotspot/PPPoE) yang ditemukan.');
             return Command::SUCCESS;
         }
 
@@ -34,8 +49,12 @@ class SyncLogAktivitas extends Command
         $updated = 0;
         $skipped = 0;
 
-        foreach ($sessions as $hotspotUser) {
-            $username = trim((string) ($hotspotUser['user'] ?? ''));
+        foreach ($sessions as $entry) {
+            $type = $entry['type'] ?? 'Hotspot';
+            $hotspotUser = $entry['raw'] ?? [];
+
+            // Hotspot menggunakan field 'user', sedangkan PPPoE menggunakan field 'name'
+            $username = trim((string) ($hotspotUser['user'] ?? $hotspotUser['name'] ?? ''));
             if ($username === '') {
                 $skipped++;
                 continue;
@@ -54,12 +73,18 @@ class SyncLogAktivitas extends Command
                 continue;
             }
 
-            $bytesIn = (int) ($hotspotUser['bytes-in'] ?? 0);
-            $bytesOut = (int) ($hotspotUser['bytes-out'] ?? 0);
+            // Field bytes biasanya 'bytes-in' / 'bytes-out', tapi gunakan fallback defensif
+            $bytesIn = (int) ($hotspotUser['bytes-in'] ?? $hotspotUser['bytes_in'] ?? 0);
+            $bytesOut = (int) ($hotspotUser['bytes-out'] ?? $hotspotUser['bytes_out'] ?? 0);
             $dataUsageMb = ($bytesIn + $bytesOut) / 1048576;
-            $durasiMenit = $this->parseUptimeToMinutes((string) ($hotspotUser['uptime'] ?? '0s'));
+
+            // Uptime field biasanya 'uptime' but fallback to 'session-time' if available
+            $uptimeRaw = (string) ($hotspotUser['uptime'] ?? $hotspotUser['session-time'] ?? '0s');
+            $durasiMenit = $this->parseUptimeToMinutes($uptimeRaw);
             $isAnomali = $dataUsageMb > 1000;
-            $ipAddress = trim((string) ($hotspotUser['address'] ?? ''));
+
+            // IP field may differ: hotspot uses 'address', pppoe may use 'address' or 'remote-address'
+            $ipAddress = trim((string) ($hotspotUser['address'] ?? $hotspotUser['remote-address'] ?? ''));
 
             $existingLog = LogAktivitas::query()
                 ->where('id_pelanggan', $pelanggan->id_pelanggan)

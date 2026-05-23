@@ -12,10 +12,10 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->command('app:kirim-tagihan-wa')->dailyAt('08:00');
-        $schedule->command('app:nonaktifkan-pelanggan')->dailyAt('00:05');
-        $schedule->command('app:sync-mikrotik-sessions')->everyFiveMinutes();
-        $schedule->command('app:sync-log-aktivitas')->everyFifteenMinutes();
+        $schedule->command('app:kirim-tagihan-wa')->dailyAt('08:00')->withoutOverlapping();
+        $schedule->command('app:nonaktifkan-pelanggan')->dailyAt('00:05')->withoutOverlapping();
+        $schedule->command('app:sync-mikrotik-sessions')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command('app:sync-log-aktivitas')->everyFifteenMinutes()->withoutOverlapping();
     }
 
     /**

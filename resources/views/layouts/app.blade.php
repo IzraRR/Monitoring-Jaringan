@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Monitoring SMKN 53')</title>
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -262,6 +263,7 @@
         </button>
         <aside id="sidebarMenu" class="sidebar collapse d-lg-block">
             <div class="sidebar-menu">
+                @if(session('admin_role') === 'Admin')
                 <a href="{{ url('/dashboard') }}" class="nav-link {{ request()->is('dashboard') ? 'active' : '' }}">
                     <i class="bi bi-grid-fill"></i><span>Dashboard</span>
                 </a>
@@ -280,6 +282,7 @@
                 <a href="{{ url('/log') }}" class="nav-link {{ request()->is('log') ? 'active' : '' }}">
                     <i class="bi bi-list-ul"></i><span>Log Aktivitas</span>
                 </a>
+                @endif
                 <a href="{{ url('/laporan') }}" class="nav-link {{ request()->is('laporan') ? 'active' : '' }}">
                     <i class="bi bi-file-earmark-text-fill"></i><span>Laporan</span>
                 </a>

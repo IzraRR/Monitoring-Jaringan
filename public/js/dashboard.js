@@ -212,86 +212,45 @@ class DashboardMonitor {
         window.TrafficAlertUtils?.handleTrafficThresholdAlert?.(data, isOffline);
     }
 
-    showThresholdModal() {
-        this.isModalOpen = true;
-
-        Swal.fire({
-            title: 'Atur Alert Threshold Traffic',
-            icon: 'info',
-            html: `
-                <div style="text-align: left;">
-                    <label class="form-label fw-bold mb-2 d-block">RX (Download) Threshold (Mbps):</label>
-                    <input type="number" id="swal-rx-threshold" class="form-control mb-3" 
-                           placeholder="0 = Nonaktif" min="0" step="1" 
-                           aria-label="RX Threshold in Mbps">
-                    
-                    <label class="form-label fw-bold mb-2 d-block">TX (Upload) Threshold (Mbps):</label>
-                    <input type="number" id="swal-tx-threshold" class="form-control" 
-                           placeholder="0 = Nonaktif" min="0" step="1"
-                           aria-label="TX Threshold in Mbps">
-                    
-                    <small class="text-muted d-block mt-3">
-                        <strong>Tips:</strong> Masukkan 0 untuk menonaktifkan threshold. 
-                        Alert akan muncul jika traffic melebihi batas yang ditetapkan.
-                    </small>
-                </div>
-            `,
-            confirmButtonText: 'Simpan',
-            cancelButtonText: 'Batal',
-            showCancelButton: true,
-            didClose: () => {
-                this.isModalOpen = false;
-            },
-            didOpen: () => {
-                document.getElementById('swal-rx-threshold').value = 
-                    this.maxRxBps > 0 ? this.maxRxBps / 1000000 : '';
-                document.getElementById('swal-tx-threshold').value = 
-                    this.maxTxBps > 0 ? this.maxTxBps / 1000000 : '';
-            }
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const rxMbps = parseFloat(document.getElementById('swal-rx-threshold').value) || 0;
-                const txMbps = parseFloat(document.getElementById('swal-tx-threshold').value) || 0;
-                
-                this.maxRxBps = rxMbps > 0 ? rxMbps * 1000000 : 0;
-                this.maxTxBps = txMbps > 0 ? txMbps * 1000000 : 0;
-                
-                this.updateThresholdDisplay();
-                this.saveThresholdsToLocalStorage();
-                
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Threshold berhasil diatur',
-                    toast: true,
-                    position: 'top-end',
-                    showConfirmButton: false,
-                    timer: 2000,
-                    timerProgressBar: true
-                });
-            }
-        });
-    }
-
     updateThresholdDisplay() {
-        const infoEl = document.getElementById('current-threshold-info');
-        if (!infoEl) return;
-        
-        if (this.maxRxBps === 0 && this.maxTxBps === 0) {
-            infoEl.textContent = 'Off';
-            infoEl.className = 'badge bg-secondary align-self-center small';
-        } else {
-            let displayText = '';
-            if (this.maxRxBps > 0) displayText += `RX: ${(this.maxRxBps / 1000000).toFixed(0)}M`;
-            if (this.maxTxBps > 0) displayText += (displayText ? ' / ' : '') + `TX: ${(this.maxTxBps / 1000000).toFixed(0)}M`;
-            infoEl.textContent = displayText;
-            infoEl.className = 'badge bg-danger align-self-center small';
+        const rxInput = document.getElementById('input-rx-threshold');
+        const txInput = document.getElementById('input-tx-threshold');
+        if (rxInput) {
+            rxInput.value = this.maxRxBps > 0 ? (this.maxRxBps / 1000000) : '';
+        }
+        if (txInput) {
+            txInput.value = this.maxTxBps > 0 ? (this.maxTxBps / 1000000) : '';
         }
     }
 
     bindEventListeners() {
-        const setThresholdBtn = document.getElementById('btn-set-threshold');
-        if (setThresholdBtn) {
-            setThresholdBtn.addEventListener('click', () => this.showThresholdModal());
+        const form = document.getElementById('threshold-form');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                const rxInput = document.getElementById('input-rx-threshold');
+                const txInput = document.getElementById('input-tx-threshold');
+                const rxMbps = parseFloat(rxInput?.value) || 0;
+                const txMbps = parseFloat(txInput?.value) || 0;
+                
+                this.maxRxBps = rxMbps > 0 ? rxMbps * 1000000 : 0;
+                this.maxTxBps = txMbps > 0 ? txMbps * 1000000 : 0;
+                
+                this.saveThresholdsToLocalStorage();
+                
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Threshold berhasil disimpan',
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 2000,
+                        timerProgressBar: true
+                    });
+                }
+            });
         }
 
         window.TrafficAlertUtils?.bindMuteToggle?.('#btn-toggle-alert-mute');

@@ -52,6 +52,7 @@ return [
         'enabled' => filter_var(env('WHATSAPP_ENABLED', false), FILTER_VALIDATE_BOOL),
         'url' => env('WHATSAPP_URL'),
         'token' => env('WHATSAPP_TOKEN'),
+        'owner_number' => env('OWNER_WA_NUMBER'),
     ],
 
 ];

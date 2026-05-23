@@ -153,6 +153,25 @@ class MikrotikService
         }
     }
 
+    private function checkForApiError($response): ?string
+    {
+        if (!is_array($response)) {
+            return null;
+        }
+
+        if (isset($response['!trap']) && is_array($response['!trap'])) {
+            $trap = $this->firstRecord($response['!trap']);
+            return $trap['message'] ?? 'Unknown MikroTik API error (trap)';
+        }
+
+        if (isset($response['!fatal']) && is_array($response['!fatal'])) {
+            $fatal = $this->firstRecord($response['!fatal']);
+            return $fatal['message'] ?? 'Unknown MikroTik API fatal error';
+        }
+
+        return null;
+    }
+
     private function makeLegacyClient(): \RouterosAPI
     {
         $api = new \RouterosAPI();
@@ -431,11 +450,17 @@ class MikrotikService
 
             if ($entry && isset($entry['.id'])) {
                 $payload['.id'] = $entry['.id'];
-                $api->comm($profilePath . '/set', $payload);
+                $res = $api->comm($profilePath . '/set', $payload);
+                if ($err = $this->checkForApiError($res)) {
+                    return ['success' => false, 'message' => 'Gagal set profile: ' . $err];
+                }
                 return ['success' => true, 'message' => 'Profile MikroTik berhasil diperbarui.'];
             }
 
-            $api->comm($profilePath . '/add', $payload);
+            $res = $api->comm($profilePath . '/add', $payload);
+            if ($err = $this->checkForApiError($res)) {
+                return ['success' => false, 'message' => 'Gagal add profile: ' . $err];
+            }
             return ['success' => true, 'message' => 'Profile MikroTik berhasil dibuat.'];
         } catch (\Throwable $e) {
             Log::warning('MikroTik profile sync failed', [
@@ -464,11 +489,17 @@ class MikrotikService
 
             if ($entry && isset($entry['.id'])) {
                 $payload['.id'] = $entry['.id'];
-                $api->comm($profilePath . '/set', $payload);
+                $res = $api->comm($profilePath . '/set', $payload);
+                if ($err = $this->checkForApiError($res)) {
+                    return ['success' => false, 'message' => 'Gagal set profile: ' . $err];
+                }
                 return ['success' => true, 'message' => 'Profile MikroTik berhasil diperbarui.'];
             }
 
-            $api->comm($profilePath . '/add', $payload);
+            $res = $api->comm($profilePath . '/add', $payload);
+            if ($err = $this->checkForApiError($res)) {
+                return ['success' => false, 'message' => 'Gagal add profile: ' . $err];
+            }
             return ['success' => true, 'message' => 'Profile MikroTik berhasil dibuat.'];
         } catch (\Throwable $e) {
             Log::warning('MikroTik profile sync by type failed', [
@@ -589,10 +620,30 @@ class MikrotikService
             }
 
             $api = $this->makeLegacyClient();
+            $basePath = $this->getBasePathByType($tipe);
+            
+            // Periksa apakah user sudah ada di MikroTik
+            $existing = $api->comm($basePath . '/print', ['?name' => $pelanggan->username_mikrotik]);
+            $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
+            
             $payload = $this->buildUserPayloadByType($pelanggan, $tipe);
-            $api->comm($this->getBasePathByType($tipe) . '/add', $payload);
-
-            return ['success' => true, 'message' => "Pelanggan {$tipe} berhasil ditambahkan ke MikroTik."];
+            
+            if ($entry && isset($entry['.id'])) {
+                // Jika sudah ada, lakukan update (set)
+                $payload['.id'] = $entry['.id'];
+                $res = $api->comm($basePath . '/set', $payload);
+                if ($err = $this->checkForApiError($res)) {
+                    return ['success' => false, 'message' => 'Gagal update user: ' . $err];
+                }
+                return ['success' => true, 'message' => "Pelanggan {$tipe} berhasil diperbarui di MikroTik."];
+            } else {
+                // Jika belum ada, lakukan penambahan (add)
+                $res = $api->comm($basePath . '/add', $payload);
+                if ($err = $this->checkForApiError($res)) {
+                    return ['success' => false, 'message' => 'Gagal tambah user: ' . $err];
+                }
+                return ['success' => true, 'message' => "Pelanggan {$tipe} berhasil ditambahkan ke MikroTik."];
+            }
         } catch (\Throwable $e) {
             Log::warning('MikroTik sync create by type failed', [
                 'tipe' => $tipe,
@@ -652,14 +703,20 @@ class MikrotikService
             if (!$entry || !isset($entry['.id'])) {
                 $payload = $this->buildUserPayloadByType($pelanggan, $tipe);
 
-                $api->comm($endpointBase . '/add', $payload);
+                $res = $api->comm($endpointBase . '/add', $payload);
+                if ($err = $this->checkForApiError($res)) {
+                    return ['success' => false, 'message' => 'Gagal tambah ulang user: ' . $err];
+                }
                 return ['success' => true, 'message' => "Pelanggan {$tipe} ditambahkan ulang di MikroTik (tidak ditemukan data lama)."];
             }
 
             $payload = $this->buildUserPayloadByType($pelanggan, $tipe);
             $payload['.id'] = $entry['.id'];
 
-            $api->comm($endpointBase . '/set', $payload);
+            $res = $api->comm($endpointBase . '/set', $payload);
+            if ($err = $this->checkForApiError($res)) {
+                return ['success' => false, 'message' => 'Gagal update user: ' . $err];
+            }
 
             return ['success' => true, 'message' => "Data pelanggan {$tipe} berhasil diperbarui di MikroTik."];
         } catch (\Throwable $e) {
@@ -701,7 +758,10 @@ class MikrotikService
             $entry = is_array($existing) && isset($existing[0]) ? $existing[0] : null;
 
             if ($entry && isset($entry['.id'])) {
-                $api->comm($basePath . '/remove', ['.id' => $entry['.id']]);
+                $res = $api->comm($basePath . '/remove', ['.id' => $entry['.id']]);
+                if ($err = $this->checkForApiError($res)) {
+                    return ['success' => false, 'message' => 'Gagal hapus user: ' . $err];
+                }
             }
 
             return ['success' => true, 'message' => "Pelanggan {$tipe} berhasil dihapus di MikroTik."];
@@ -768,9 +828,15 @@ class MikrotikService
                         $payload = $this->buildUserPayload($pelanggan);
                         if ($entry && isset($entry['.id'])) {
                             $payload['.id'] = $entry['.id'];
-                            $api->comm($base . '/set', $payload);
+                            $res = $api->comm($base . '/set', $payload);
+                            if ($err = $this->checkForApiError($res)) {
+                                throw new \RuntimeException($err);
+                            }
                         } else {
-                            $api->comm($base . '/add', $payload);
+                            $res = $api->comm($base . '/add', $payload);
+                            if ($err = $this->checkForApiError($res)) {
+                                throw new \RuntimeException($err);
+                            }
                         }
 
                         $synced++;
@@ -813,10 +879,13 @@ class MikrotikService
                 return ['success' => false, 'message' => "User {$tipe} MikroTik tidak ditemukan untuk diubah statusnya."];
             }
 
-            $api->comm($basePath . '/set', [
+            $res = $api->comm($basePath . '/set', [
                 '.id' => $entry['.id'],
                 'disabled' => $enabled ? 'no' : 'yes',
             ]);
+            if ($err = $this->checkForApiError($res)) {
+                return ['success' => false, 'message' => 'Gagal ubah status user: ' . $err];
+            }
 
             $statusMsg = $enabled ? 'diaktifkan' : 'dikunci (disabled)';
             return ['success' => true, 'message' => "User {$tipe} di MikroTik berhasil {$statusMsg}."];
@@ -857,7 +926,10 @@ class MikrotikService
         try {
             $api = $this->makeLegacyClient();
             $activePath = $this->getActivePathByType($tipe);
-            $active = $api->comm($activePath . '/print', ['?name' => $pelanggan->username_mikrotik]);
+            
+            // MikroTik active print: Hotspot menggunakan field 'user', sedangkan PPPoE menggunakan field 'name'
+            $queryKey = trim($tipe) === 'PPPoE' ? 'name' : 'user';
+            $active = $api->comm($activePath . '/print', ["?{$queryKey}" => $pelanggan->username_mikrotik]);
 
             if (!is_array($active) || count($active) === 0) {
                 return ['success' => true, 'message' => "Tidak ada sesi {$tipe} aktif untuk user ini."];
@@ -866,7 +938,10 @@ class MikrotikService
             $removed = 0;
             foreach ($active as $item) {
                 if (isset($item['.id'])) {
-                    $api->comm($activePath . '/remove', ['.id' => $item['.id']]);
+                    $res = $api->comm($activePath . '/remove', ['.id' => $item['.id']]);
+                    if ($err = $this->checkForApiError($res)) {
+                        return ['success' => false, 'message' => 'Gagal mengeluarkan sesi aktif: ' . $err];
+                    }
                     $removed++;
                 }
             }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\LogAktivitas;
+use App\Traits\ParsesDateRange;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use App\Services\MikrotikService;
@@ -10,37 +11,18 @@ use Illuminate\Support\Facades\Log as FacadeLog;
 
 class LogAktivitasController extends Controller
 {
+    use ParsesDateRange;
     public function index(Request $request, MikrotikService $mikrotikService)
     {
         $search = trim((string) $request->query('q', ''));
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
 
-        $start = null;
-        $end = null;
-
-        if (is_string($startDate) && $startDate !== '') {
-            try {
-                $start = Carbon::createFromFormat('Y-m-d', $startDate)->startOfDay();
-            } catch (\Throwable $e) {
-                $start = null;
-                $startDate = null;
-            }
-        }
-
-        if (is_string($endDate) && $endDate !== '') {
-            try {
-                $end = Carbon::createFromFormat('Y-m-d', $endDate)->endOfDay();
-            } catch (\Throwable $e) {
-                $end = null;
-                $endDate = null;
-            }
-        }
-
-        if ($start && $end && $start->gt($end)) {
-            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
-            [$startDate, $endDate] = [$start->toDateString(), $end->toDateString()];
-        }
+        $dates = $this->parseDateRange($startDate, $endDate);
+        $start = $dates['start'];
+        $end = $dates['end'];
+        $startDate = $dates['startDate'];
+        $endDate = $dates['endDate'];
 
         $logAktivitas = LogAktivitas::with(['pelanggan', 'paket'])
             ->when($search !== '', function ($query) use ($search) {

@@ -20,8 +20,22 @@ class PaketBandwidth extends Model
         'harga',
     ];
 
+    protected $casts = [
+        'harga' => 'decimal:0',
+    ];
+
     public function pelanggan(): HasMany
     {
         return $this->hasMany(Pelanggan::class, 'id_paket', 'id_paket');
+    }
+
+    public function pembayaran(): HasMany
+    {
+        return $this->hasMany(Pembayaran::class, 'id_paket', 'id_paket');
+    }
+
+    public function logAktivitas(): HasMany
+    {
+        return $this->hasMany(LogAktivitas::class, 'id_paket', 'id_paket');
     }
 }

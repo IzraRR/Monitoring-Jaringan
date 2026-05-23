@@ -55,7 +55,7 @@
 
 <div class="laporan-header mb-4">
     <form method="GET" class="row g-2 align-items-center">
-        <div class="col-12 col-lg-3">
+        <div class="col-12 col-lg-2">
             <h4 class="fw-bold mb-0">Laporan Keuangan</h4>
         </div>
         <div class="col-12 col-md-3 col-lg-2">
@@ -64,17 +64,33 @@
         <div class="col-12 col-md-3 col-lg-2">
             <input type="date" id="end_date" name="end_date" value="{{ $endDate }}" class="form-control border-0 shadow-sm">
         </div>
-        <div class="col-12 col-md-3 col-lg-2">
+        <div class="col-12 col-md-3 col-lg-1">
             <button type="submit" class="btn btn-light fw-semibold w-100 shadow-sm">Filter</button>
         </div>
         <div class="col-12 col-md-3 col-lg-2">
             <a href="{{ route('laporan.cetak', request()->only('start_date', 'end_date')) }}" class="btn btn-outline-light fw-semibold w-100 shadow-sm">Cetak PDF</a>
         </div>
         <div class="col-12 col-md-3 col-lg-1">
+            <a href="{{ route('laporan.export-excel', request()->only('start_date', 'end_date')) }}" class="btn btn-outline-light fw-semibold w-100 shadow-sm" title="Export Excel">Excel</a>
+        </div>
+        @if (session('admin_role') === 'Admin')
+        <div class="col-12 col-md-3 col-lg-1">
+            <button type="button" id="btn-kirim-owner" class="btn btn-success fw-semibold w-100 shadow-sm" title="Kirim Laporan via WA ke Owner">
+                <i class="bi bi-whatsapp"></i> WA
+            </button>
+        </div>
+        @endif
+        <div class="col-12 col-md-3 {{ session('admin_role') === 'Admin' ? 'col-lg-1' : 'col-lg-2' }}">
             <a href="{{ route('laporan.index') }}" class="btn btn-outline-light fw-semibold w-100 shadow-sm">Reset</a>
         </div>
     </form>
 </div>
+
+@if (session('admin_role') === 'Admin')
+<form id="form-kirim-owner" action="{{ route('laporan.kirim-owner', request()->only('start_date', 'end_date')) }}" method="POST" class="d-none">
+    @csrf
+</form>
+@endif
 
 <div class="row g-3 mb-4">
     <div class="col-md-4">
@@ -253,6 +269,29 @@
                     }
                 }
             }
+        });
+    }
+
+    const btnKirimOwner = document.getElementById('btn-kirim-owner');
+    if (btnKirimOwner) {
+        btnKirimOwner.addEventListener('click', function() {
+            Swal.fire({
+                title: 'Kirim Laporan ke Owner?',
+                html: 'Sistem akan **mengenerate tautan PDF terenkripsi** (berlaku 7 hari) dan mengirimkan ringkasan laporan beserta link unduh langsung ke **WhatsApp Owner**.<br><br>Lanjutkan?',
+                icon: 'question',
+                iconColor: '#25d366',
+                showCancelButton: true,
+                confirmButtonColor: '#25d366',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Ya, Kirim Sekarang!',
+                cancelButtonText: 'Batalkan',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.showLoading();
+                    document.getElementById('form-kirim-owner').submit();
+                }
+            });
         });
     }
 </script>

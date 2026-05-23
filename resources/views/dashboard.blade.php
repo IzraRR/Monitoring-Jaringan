@@ -77,18 +77,23 @@
             <div class="card-body">
                 <h6 class="fw-bold text-dark mb-4">Analisis & Peringatan<br>(Alert)</h6>
                 
-                <form>
-                    <label class="form-label text-secondary mb-1">Threshold Penuh :</label>
-                    <input type="number" class="form-control bg-dark text-white text-center fw-bold fs-4 mb-3" value="100" style="border-radius: 8px;" disabled>
+                <form id="threshold-form">
+                    <div class="mb-2">
+                        <label class="form-label text-secondary mb-1 small fw-semibold">Threshold RX (Download) Mbps :</label>
+                        <input type="number" id="input-rx-threshold" class="form-control bg-dark text-white text-center fw-bold fs-5" min="0" placeholder="0 = Off" style="border-radius: 8px;">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-secondary mb-1 small fw-semibold">Threshold TX (Upload) Mbps :</label>
+                        <input type="number" id="input-tx-threshold" class="form-control bg-dark text-white text-center fw-bold fs-5" min="0" placeholder="0 = Off" style="border-radius: 8px;">
+                    </div>
                     
                     <div class="d-flex gap-2 mb-4">
-                        <button type="button" id="btn-set-threshold" class="btn btn-sm btn-outline-danger flex-grow-1">
-                            <i class="bi bi-speedometer2"></i> Set Alert
+                        <button type="submit" class="btn btn-sm btn-danger flex-grow-1">
+                            <i class="bi bi-check-circle"></i> Simpan
                         </button>
                         <button type="button" id="btn-toggle-alert-mute" class="btn btn-sm btn-outline-secondary flex-grow-1">
                             <i class="bi bi-bell-slash"></i> Silent
                         </button>
-                        <span id="current-threshold-info" class="badge bg-secondary align-self-center small">Off</span>
                     </div>
                 </form>
 
@@ -134,7 +139,6 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     // Define endpoint untuk dashboard monitor
     const realtimeEndpoint = @json(route('dashboard.realtime-stats'));

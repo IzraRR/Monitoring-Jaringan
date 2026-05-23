@@ -47,17 +47,17 @@ class SyncMikrotikDataJob implements ShouldQueue
             switch ($this->syncType) {
                 case 'summary':
                     $result = $mikrotikService->getSystemSummary();
-                    $success = $result['success'] ?? false;
+                    $success = $result['connected'] ?? false;
                     break;
 
                 case 'realtime':
                     $result = $mikrotikService->getRealtimeStats();
-                    $success = $result['success'] ?? false;
+                    $success = $result['connected'] ?? false;
                     break;
 
                 case 'users':
-                    // Sync all active users from MikroTik
-                    $result = $mikrotikService->getAllActiveUsers();
+                    // Sync all pelanggan to MikroTik
+                    $result = $mikrotikService->syncAllPelanggan();
                     $success = $result['success'] ?? false;
                     break;
 
@@ -65,7 +65,7 @@ class SyncMikrotikDataJob implements ShouldQueue
                     // Sync everything
                     $summary = $mikrotikService->getSystemSummary();
                     $realtime = $mikrotikService->getRealtimeStats();
-                    $success = ($summary['success'] ?? false) && ($realtime['success'] ?? false);
+                    $success = ($summary['connected'] ?? false) && ($realtime['connected'] ?? false);
                     break;
 
                 default:
