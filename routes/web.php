@@ -34,8 +34,11 @@ Route::get('/deploy-migrate', function() {
         \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
         $seedOutput = \Illuminate\Support\Facades\Artisan::output();
         
-        // Fix role for kepsek to Kepsek (for requirements)
-        \DB::table('admin')->where('username', 'kepsek')->update(['peran' => 'Kepsek']);
+        // Fix role and name for kepsek to Kepsek (for requirements)
+        \DB::table('admin')->where('username', 'kepsek')->update([
+            'peran' => 'Kepsek',
+            'nama_lengkap' => 'Kepala Sekolah'
+        ]);
         
         return response()->json([
             'status' => 'success',
