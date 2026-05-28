@@ -39,6 +39,9 @@ Route::get('/deploy-migrate', function() {
             'peran' => 'Kepsek',
             'nama_lengkap' => 'Kepala Sekolah'
         ]);
+
+        // Bersihkan cache agar koneksi MikroTik langsung di-check ulang secara realtime
+        \Illuminate\Support\Facades\Cache::flush();
         
         return response()->json([
             'status' => 'success',
