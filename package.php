@@ -48,8 +48,8 @@ foreach ($files as $name => $file) {
         $relativePath === '.git' ||
         strpos($relativePath, 'node_modules/') === 0 ||
         $relativePath === 'node_modules' ||
-        strpos($relativePath, '.fly/') === 0 ||
-        $relativePath === '.fly' ||
+        strpos($relativePath, '.docker/') === 0 ||
+        $relativePath === '.docker' ||
         $relativePath === 'Dockerfile' ||
         $relativePath === 'fly.toml' ||
         $relativePath === 'package.php' ||

@@ -28,8 +28,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # Prepare base container: 
 # 1. Install PHP, Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-COPY .fly/php/ondrej_ubuntu_php.gpg /etc/apt/trusted.gpg.d/ondrej_ubuntu_php.gpg
-ADD .fly/php/packages/${PHP_VERSION}.txt /tmp/php-packages.txt
+COPY .docker/php/ondrej_ubuntu_php.gpg /etc/apt/trusted.gpg.d/ondrej_ubuntu_php.gpg
+ADD .docker/php/packages/${PHP_VERSION}.txt /tmp/php-packages.txt
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gnupg2 ca-certificates git-core curl zip unzip \
@@ -45,11 +45,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/*
 
 # 2. Copy config files to proper locations
-COPY .fly/nginx/ /etc/nginx/
-COPY .fly/fpm/ /etc/php/${PHP_VERSION}/fpm/
-COPY .fly/supervisor/ /etc/supervisor/
-COPY .fly/entrypoint.sh /entrypoint
-COPY .fly/start-nginx.sh /usr/local/bin/start-nginx
+COPY .docker/nginx/ /etc/nginx/
+COPY .docker/fpm/ /etc/php/${PHP_VERSION}/fpm/
+COPY .docker/supervisor/ /etc/supervisor/
+COPY .docker/entrypoint.sh /entrypoint
+COPY .docker/start-nginx.sh /usr/local/bin/start-nginx
 RUN chmod 754 /usr/local/bin/start-nginx
     
 # 3. Copy application code, skipping files based on .dockerignore
@@ -62,7 +62,7 @@ RUN composer install --optimize-autoloader --no-dev \
     && php artisan optimize:clear \
     && chown -R www-data:www-data /var/www/html \
     && echo "MAILTO=\"\"\n* * * * * www-data /usr/bin/php /var/www/html/artisan schedule:run" > /etc/cron.d/laravel;\
-    if [ -d .fly ]; then cp .fly/entrypoint.sh /entrypoint; chmod +x /entrypoint; fi;
+    if [ -d .docker ]; then cp .docker/entrypoint.sh /entrypoint; chmod +x /entrypoint; fi;
 
 
 
