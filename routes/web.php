@@ -78,6 +78,7 @@ Route::middleware(['admin.auth', 'admin.role'])->group(function () {
     Route::post('/pembayaran/notifikasi/kirim', [PembayaranController::class, 'sendNotifications'])->name('pembayaran.send-notifications');
     Route::get('/pembayaran/{id}/struk', [PembayaranController::class, 'cetakStruk'])->name('pembayaran.struk');
     Route::get('/log', [LogAktivitasController::class, 'index'])->name('log.index');
+    Route::post('/log/anomali-threshold', [LogAktivitasController::class, 'updateAnomalyThreshold'])->name('log.update-threshold');
     Route::get('/laporan', [LaporanController::class, 'index'])->name('laporan.index');
     Route::get('/laporan/cetak', [LaporanController::class, 'cetakPdf'])->name('laporan.cetak');
     Route::get('/laporan/export-excel', [LaporanController::class, 'exportExcel'])->name('laporan.export-excel');

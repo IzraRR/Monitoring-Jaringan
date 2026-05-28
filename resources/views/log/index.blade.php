@@ -50,6 +50,9 @@
                 <button class="btn fw-bold px-3 ms-2" type="submit" style="background-color: #e2e8f0; color: #0f172a; border: 1px solid #cbd5e1;">TAMPILKAN LOG</button>
                 <a href="{{ route('log.index') }}" id="log-reset-btn" class="btn fw-bold px-3" style="background-color: #fff; color: #0f172a; border: 1px solid #cbd5e1;">RESET</a>
             </form>
+            <button type="button" class="btn btn-outline-danger border-2 fw-bold px-3" data-bs-toggle="modal" data-bs-target="#anomalySettingsModal" style="border-radius: 8px;">
+                <i class="bi bi-gear-fill me-1"></i> SET ANOMALI
+            </button>
         </div>
     </div>
     <div id="log-table-container">
@@ -126,9 +129,9 @@
                             </td>
                             <td>
                                 @if($log->is_anomali)
-                                    <span class="text-danger fw-bold"><i class="bi bi-x-circle-fill me-1"></i> Gagal</span>
+                                    <span class="text-danger fw-bold"><i class="bi bi-x-circle-fill me-1"></i> Anomali</span>
                                 @else
-                                    <span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i> Sukses</span>
+                                    <span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i> Normal</span>
                                 @endif
                             </td>
                             <td>
@@ -161,6 +164,38 @@
             <div>{{ $logAktivitas->links() }}</div>
         </div>
     </div>
+</div>
+
+<!-- Modal Pengaturan Anomali -->
+<div class="modal fade" id="anomalySettingsModal" tabindex="-1" aria-labelledby="anomalySettingsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow" style="border-radius: 12px; overflow: hidden;">
+      <div class="modal-header text-white" style="background-color: #17395f;">
+        <h5 class="modal-title fw-bold" id="anomalySettingsModalLabel"><i class="bi bi-gear-fill me-2"></i>Pengaturan Batas Anomali</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ route('log.update-threshold') }}" method="POST">
+        @csrf
+        <div class="modal-body p-4 text-start">
+          <p class="text-secondary small mb-3">
+            Sesi pemakaian data pelanggan yang melebihi batas ini saat sinkronisasi otomatis akan ditandai dengan status <span class="badge bg-danger">Gagal</span> (Anomali).
+          </p>
+          <div class="mb-3">
+            <label for="batas_anomali_mb" class="form-label fw-bold text-dark">Batas Volume Data</label>
+            <div class="input-group">
+              <input type="number" name="batas_anomali_mb" id="batas_anomali_mb" class="form-control border-dark border-2 fw-semibold" value="{{ $batasAnomali }}" min="1" required style="border-radius: 8px 0 0 8px;">
+              <span class="input-group-text border-dark border-2 bg-light fw-bold" style="border-radius: 0 8px 8px 0;">MB</span>
+            </div>
+            <small class="text-muted mt-1 d-block">Default: 1000 MB (1 GB)</small>
+          </div>
+        </div>
+        <div class="modal-footer bg-light border-0">
+          <button type="button" class="btn btn-secondary fw-semibold" data-bs-dismiss="modal" style="border-radius: 8px;">Batal</button>
+          <button type="submit" class="btn text-white fw-bold px-4" style="background-color: #17395f; border-radius: 8px;">Simpan Perubahan</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 @push('scripts')

@@ -79,6 +79,18 @@ class LogAktivitasController extends Controller
             'endDate' => $endDate,
             'summary' => $summary,
             'activeIps' => $activeIps,
+            'batasAnomali' => \App\Models\Setting::get('batas_anomali_mb', 1000),
         ]);
+    }
+
+    public function updateAnomalyThreshold(Request $request)
+    {
+        $request->validate([
+            'batas_anomali_mb' => 'required|numeric|min:1',
+        ]);
+
+        \App\Models\Setting::set('batas_anomali_mb', $request->input('batas_anomali_mb'));
+
+        return redirect()->route('log.index')->with('success', 'Batas volume anomali berhasil diperbarui menjadi ' . $request->input('batas_anomali_mb') . ' MB.');
     }
 }

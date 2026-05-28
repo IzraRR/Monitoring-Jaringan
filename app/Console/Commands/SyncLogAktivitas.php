@@ -107,7 +107,8 @@ class SyncLogAktivitas extends Command
             // Dapatkan uptime
             $uptimeRaw = (string) ($hotspotUser['uptime'] ?? $hotspotUser['session-time'] ?? '0s');
             $durasiMenit = $this->parseUptimeToMinutes($uptimeRaw);
-            $isAnomali = $dataUsageMb > 1000;
+            $threshold = (float) \App\Models\Setting::get('batas_anomali_mb', 1000);
+            $isAnomali = $dataUsageMb > $threshold;
 
             // Dapatkan IP address
             $ipAddress = trim((string) ($hotspotUser['address'] ?? $hotspotUser['remote-address'] ?? ''));
