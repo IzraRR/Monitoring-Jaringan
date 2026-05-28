@@ -103,6 +103,14 @@ class DashboardController extends Controller
                 return $mikrotikService->getRealtimeStats();
             });
 
+            if (is_array($stats) && ($stats['status'] ?? '') === 'offline') {
+                $message = 'Router tidak dapat dihubungi.';
+                if (config('app.debug') && !empty($stats['error'])) {
+                    $message .= ' Error: ' . $stats['error'];
+                }
+                $stats['message'] = $message;
+            }
+
             return response()->json($stats);
         } catch (\Throwable $e) {
             Log::warning('MikroTik realtime stats unavailable', [
