@@ -20,22 +20,24 @@ class AdminSeeder extends Seeder
             }
 
             $password = 'admin123';
-            $this->command?->warn('Menggunakan password default dev (admin123). Ubah segera setelah login!');
         }
 
         $username = env('ADMIN_SEED_USERNAME', 'admin');
-        $namaLengkap = ($username === 'kepsek') ? 'Kepala Sekolah' : 'Administrator';
-        $peran = ($username === 'kepsek') ? 'Kepsek' : 'Admin';
+        
+        $exists = DB::table('admin')->where('username', $username)->exists();
 
-        DB::table('admin')->updateOrInsert(
-            ['username' => $username],
-            [
+        if (!$exists) {
+            $namaLengkap = ($username === 'kepsek') ? 'Kepala Sekolah' : 'Administrator';
+            $peran = ($username === 'kepsek') ? 'Kepsek' : 'Admin';
+
+            DB::table('admin')->insert([
+                'username' => $username,
                 'password' => Hash::make($password),
                 'nama_lengkap' => $namaLengkap,
                 'peran' => $peran,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]
-        );
+            ]);
+        }
     }
 }
