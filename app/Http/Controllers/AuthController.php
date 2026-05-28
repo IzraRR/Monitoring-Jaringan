@@ -65,6 +65,9 @@ class AuthController extends Controller
 
             return back()->withInput()->with('error', 'Koneksi ke server database terputus. Pastikan service database sudah berjalan.');
         } catch (\Exception $e) {
+            if (config('app.debug')) {
+                throw $e;
+            }
             \Log::error('System error during login: ' . $e->getMessage());
 
             return back()->withInput()->with('error', 'Terjadi kesalahan sistem saat memproses login.');
