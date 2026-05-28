@@ -46,7 +46,7 @@ class AuthController extends Controller
             // Migrasikan password plaintext lama ke hash jika masih belum terenkripsi.
             if (!Hash::check($credentials['password'], $admin->password)) {
                 $admin->update([
-                    'password' => Hash::make($credentials['password']),
+                    'password' => $credentials['password'],
                 ]);
             }
 
