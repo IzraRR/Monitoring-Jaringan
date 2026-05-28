@@ -36,12 +36,16 @@ Route::get('/deploy-migrate', function() {
 
         // Bersihkan cache agar koneksi MikroTik langsung di-check ulang secara realtime
         \Illuminate\Support\Facades\Cache::flush();
+
+        // Cek koneksi MikroTik secara langsung
+        $mikrotikStats = app(\App\Services\MikrotikService::class)->getRealtimeStats();
         
         return response()->json([
             'status' => 'success',
             'message' => 'Migration, seeding, and role assignment completed!',
             'migration' => explode("\n", trim($migrationOutput)),
-            'seeding' => explode("\n", trim($seedOutput))
+            'seeding' => explode("\n", trim($seedOutput)),
+            'mikrotik_test' => $mikrotikStats
         ]);
     } catch (\Exception $e) {
         return response()->json([
