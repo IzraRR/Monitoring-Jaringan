@@ -184,12 +184,12 @@ class MikrotikService
                 (string) config('services.mikrotik.pass')
             );
         } catch (\Throwable $e) {
-            throw new MikrotikConnectionException('Koneksi MikroTik Timeout/Gagal', 0, $e);
+            throw new MikrotikConnectionException('Koneksi MikroTik Timeout/Gagal: ' . $e->getMessage(), 0, $e);
         }
 
         if (!$connected) {
             $lastError = $api->error_str ?? null;
-            throw new MikrotikConnectionException($lastError ?: 'Koneksi MikroTik Timeout/Gagal');
+            throw new MikrotikConnectionException($lastError ?: 'Koneksi MikroTik Timeout/Gagal (koneksi ditolak atau salah port/kredensial)');
         }
 
         return $api;
