@@ -21,7 +21,7 @@ use App\Http\Controllers\PasswordController;
 */
 
 Route::get('/deploy-migrate', function() {
-    if (request('key') !== 'monitoring123') {
+    if (request('key') !== env('DEPLOY_KEY', 'monitoring123')) {
         abort(403, 'Unauthorized access.');
     }
     
@@ -57,7 +57,7 @@ Route::get('/deploy-migrate', function() {
 });
 
 Route::get('/clear-cache', function() {
-    if (request('key') !== 'monitoring123') {
+    if (request('key') !== env('DEPLOY_KEY', 'monitoring123')) {
         abort(403, 'Unauthorized access.');
     }
     
