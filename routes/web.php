@@ -33,12 +33,6 @@ Route::get('/deploy-migrate', function() {
         // Run seeders
         \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
         $seedOutput = \Illuminate\Support\Facades\Artisan::output();
-        
-        // Fix role and name for kepsek to Kepsek (for requirements)
-        \DB::table('admin')->where('username', 'kepsek')->update([
-            'peran' => 'Kepsek',
-            'nama_lengkap' => 'Kepala Sekolah'
-        ]);
 
         // Bersihkan cache agar koneksi MikroTik langsung di-check ulang secara realtime
         \Illuminate\Support\Facades\Cache::flush();
