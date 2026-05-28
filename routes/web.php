@@ -56,6 +56,30 @@ Route::get('/deploy-migrate', function() {
     }
 });
 
+Route::get('/clear-cache', function() {
+    if (request('key') !== 'monitoring123') {
+        abort(403, 'Unauthorized access.');
+    }
+    
+    try {
+        \Illuminate\Support\Facades\Cache::flush();
+        
+        // Uji koneksi MikroTik setelah cache dibersihkan
+        $mikrotikStats = app(\App\Services\MikrotikService::class)->getRealtimeStats();
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Cache cleared successfully!',
+            'mikrotik_test' => $mikrotikStats
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
 Route::get('/', function () {
     if (session('status_login') === true) {
         $role = session('admin_role');
