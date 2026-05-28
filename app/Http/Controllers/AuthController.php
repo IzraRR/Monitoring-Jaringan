@@ -36,15 +36,19 @@ class AuthController extends Controller
                 return back()->withInput()->with('error', 'Username atau password salah.');
             }
 
-            $isValidPassword = Hash::check($credentials['password'], $admin->password)
-                || hash_equals((string) $admin->password, $credentials['password']);
+            // Cek apakah password di database merupakan hash Bcrypt (dimulai dengan $2y$)
+            $isHash = str_starts_with($admin->password, '$2y$');
+
+            $isValidPassword = $isHash
+                ? Hash::check($credentials['password'], $admin->password)
+                : hash_equals($admin->password, $credentials['password']);
 
             if (!$isValidPassword) {
                 return back()->withInput()->with('error', 'Username atau password salah.');
             }
 
             // Migrasikan password plaintext lama ke hash jika masih belum terenkripsi.
-            if (!Hash::check($credentials['password'], $admin->password)) {
+            if (!$isHash) {
                 $admin->update([
                     'password' => $credentials['password'],
                 ]);
