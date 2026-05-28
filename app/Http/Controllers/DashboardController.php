@@ -109,9 +109,14 @@ class DashboardController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
+            $message = 'Router tidak dapat dihubungi.';
+            if (config('app.debug')) {
+                $message .= ' Error: ' . $e->getMessage();
+            }
+
             return response()->json([
                 'status' => 'offline',
-                'message' => 'Router tidak dapat dihubungi.',
+                'message' => $message,
                 'connected' => false,
                 'identity' => null,
                 'uptime' => 'Offline',

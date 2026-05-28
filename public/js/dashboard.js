@@ -193,6 +193,11 @@ class DashboardMonitor {
 
         this.updateElement('mikrotik-offline-message', (el) => {
             el.classList.toggle('d-none', !isOffline);
+            if (isOffline && data.message) {
+                el.textContent = data.message;
+            } else {
+                el.textContent = 'Koneksi ke Router terputus.';
+            }
         });
 
         if (!isOffline) {
