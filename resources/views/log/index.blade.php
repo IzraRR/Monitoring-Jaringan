@@ -85,7 +85,7 @@
                             </td>
                             <td>
                                 @php
-                                    $namaPaket = optional(optional($log->paket)->nama_paket ?? optional($log->pelanggan)->paket)->nama_paket ?? '';
+                                    $namaPaket = optional($log->paket)->nama_paket ?? optional(optional($log->pelanggan)->paket)->nama_paket ?? '';
                                     $isPppoe = \Illuminate\Support\Str::contains(strtolower($namaPaket), 'pppoe');
                                     $tipeKoneksi = $isPppoe ? 'PPPoE' : 'Hotspot';
 
