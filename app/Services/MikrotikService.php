@@ -100,12 +100,7 @@ class MikrotikService
                 $result['tx_bps'] = (int) $tx;
             }
 
-            if ($result['rx_bps'] === 0 && $result['tx_bps'] === 0) {
-                $result['source'] = 'interface-print';
-                $interface = $this->firstRecord($api->comm('/interface/print', ['?name' => $interfaceName]));
-                $result['rx_bps'] = isset($interface['rx-byte']) ? ((int) $interface['rx-byte'] * 8) : 0;
-                $result['tx_bps'] = isset($interface['tx-byte']) ? ((int) $interface['tx-byte'] * 8) : 0;
-            }
+            // Hapus fallback interface-print yang menganggap bytes kumulatif sebagai speed instan (bps) untuk menghindari spike palsu.
 
             return $result;
         } catch (\Throwable $e) {
@@ -409,6 +404,152 @@ class MikrotikService
             $result['tx_bps'] = (int) ($traffic['tx_bps'] ?? 0);
         } catch (\Throwable $e) {
             $result['error'] = $e->getMessage();
+        }
+
+        return $result;
+    }
+
+    public function getPelangganRealtimeStats($idPelanggan): array
+    {
+        $result = [
+            'status' => 'offline',
+            'connected' => false,
+            'identity' => null,
+            'uptime' => 'Offline',
+            'cpu_load' => null,
+            'hotspot_active' => 0,
+            'pppoe_active' => 0,
+            'interface_name' => 'Pelanggan',
+            'rx_bps' => 0,
+            'tx_bps' => 0,
+            'configured' => $this->isConfigured(),
+        ];
+
+        if (!$result['configured']) {
+            return $result;
+        }
+
+        try {
+            $pelanggan = \App\Models\Pelanggan::find($idPelanggan);
+            if (!$pelanggan) {
+                return $result;
+            }
+
+            $username = strtolower($pelanggan->username_mikrotik);
+            $api = $this->makeLegacyClient();
+
+            // Router is connected successfully
+            $result['status'] = 'online';
+            $result['connected'] = true;
+            $result['identity'] = $pelanggan->nama_pelanggan;
+
+            // Fetch active sessions count and resource info so the sidebar is populated! (Cached 10 seconds to avoid API delay)
+            $systemInfo = \Illuminate\Support\Facades\Cache::remember('mikrotik:system_info_quick', 10, function () use ($api) {
+                try {
+                    $res = $this->firstRecord($api->comm('/system/resource/print'));
+                    $hs = $api->comm(self::HOTSPOT_ACTIVE_PATH . '/print');
+                    $pp = $api->comm(self::PPPOE_ACTIVE_PATH . '/print');
+                    return [
+                        'cpu_load' => isset($res['cpu-load']) ? (int) $res['cpu-load'] : null,
+                        'hotspot_active' => is_array($hs) ? count($hs) : 0,
+                        'pppoe_active' => is_array($pp) ? count($pp) : 0,
+                    ];
+                } catch (\Throwable $e) {
+                    return [
+                        'cpu_load' => null,
+                        'hotspot_active' => 0,
+                        'pppoe_active' => 0,
+                    ];
+                }
+            });
+
+            $result['cpu_load'] = $systemInfo['cpu_load'];
+            $result['hotspot_active'] = $systemInfo['hotspot_active'];
+            $result['pppoe_active'] = $systemInfo['pppoe_active'];
+
+            // Ambil info status online dari Active session
+            $isOnline = false;
+            $uptime = 'Offline';
+            $ipAddress = '-';
+            $tipe = '-';
+
+            // Cek Hotspot active
+            $hotspot = $api->comm(self::HOTSPOT_ACTIVE_PATH . '/print', ['?user' => $pelanggan->username_mikrotik]);
+            $hotspotEntry = is_array($hotspot) && isset($hotspot[0]) ? $hotspot[0] : null;
+
+            if ($hotspotEntry) {
+                $isOnline = true;
+                $uptime = $hotspotEntry['uptime'] ?? '00:00:00';
+                $ipAddress = $hotspotEntry['address'] ?? '-';
+                $tipe = 'Hotspot';
+            } else {
+                // Cek PPPoE active
+                $pppoe = $api->comm(self::PPPOE_ACTIVE_PATH . '/print', ['?name' => $pelanggan->username_mikrotik]);
+                $pppoeEntry = is_array($pppoe) && isset($pppoe[0]) ? $pppoe[0] : null;
+
+                if ($pppoeEntry) {
+                    $isOnline = true;
+                    $uptime = $pppoeEntry['uptime'] ?? '00:00:00';
+                    $ipAddress = $pppoeEntry['address'] ?? '-';
+                    $tipe = 'PPPoE';
+                }
+            }
+
+            if ($isOnline) {
+                $result['uptime'] = 'Online: ' . $uptime;
+                $result['interface_name'] = $tipe . ' | ' . $ipAddress;
+
+                $uploadRate = 0;
+                $downloadRate = 0;
+                $matchedQueue = null;
+
+                // Fast path 1: Coba cari queue berdasarkan nama exact (username)
+                $queues = $api->comm('/queue/simple/print', ['?name' => $pelanggan->username_mikrotik]);
+                if (is_array($queues) && isset($queues[0])) {
+                    $matchedQueue = $queues[0];
+                }
+
+                // Fast path 2: Coba cari queue berdasarkan IP target
+                if (!$matchedQueue && $ipAddress !== '-') {
+                    $queues = $api->comm('/queue/simple/print', ['?target' => $ipAddress . '/32']);
+                    if (is_array($queues) && isset($queues[0])) {
+                        $matchedQueue = $queues[0];
+                    }
+                }
+
+                // Slow path: Fallback ke cetak semua jika belum ketemu
+                if (!$matchedQueue) {
+                    $allQueues = $api->comm('/queue/simple/print');
+                    $allQueues = is_array($allQueues) ? $allQueues : [];
+                    foreach ($allQueues as $q) {
+                        if (isset($q['name'])) {
+                            $qName = strtolower($q['name']);
+                            if ($qName === $username || strpos($qName, $username) !== false) {
+                                $matchedQueue = $q;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if ($matchedQueue) {
+                    if (isset($matchedQueue['rate']) && strpos($matchedQueue['rate'], '/') !== false) {
+                        $rateParts = explode('/', $matchedQueue['rate']);
+                        $uploadRate = (int)$rateParts[0];
+                        $downloadRate = (int)$rateParts[1];
+                    }
+                }
+
+                $result['rx_bps'] = $downloadRate;
+                $result['tx_bps'] = $uploadRate;
+            } else {
+                $result['uptime'] = 'Offline (Pelanggan)';
+                $result['interface_name'] = 'Tidak Aktif';
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Gagal mengambil realtime stats pelanggan: ' . $e->getMessage());
+            $result['status'] = 'offline';
+            $result['connected'] = false;
         }
 
         return $result;

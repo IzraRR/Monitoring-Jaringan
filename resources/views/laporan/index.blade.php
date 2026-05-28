@@ -51,6 +51,24 @@
         border-radius: 14px;
         box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
     }
+    .bg-primary-subtle {
+        background-color: rgba(13, 110, 253, 0.1) !important;
+    }
+    .bg-success-subtle {
+        background-color: rgba(25, 135, 84, 0.1) !important;
+    }
+    .bg-danger-subtle {
+        background-color: rgba(220, 53, 69, 0.1) !important;
+    }
+    .bg-warning-subtle {
+        background-color: rgba(255, 193, 7, 0.1) !important;
+    }
+    .bg-secondary-subtle {
+        background-color: rgba(108, 117, 125, 0.1) !important;
+    }
+    .bg-info-subtle {
+        background-color: rgba(13, 202, 240, 0.1) !important;
+    }
 </style>
 
 <div class="laporan-header mb-4">
@@ -117,6 +135,68 @@
                 <div class="text-secondary fw-semibold mb-2">Tunggakan Aktif</div>
                 <div class="metric-value text-danger">Rp {{ number_format($summary['tunggakan_aktif'], 0, ',', '.') }}</div>
                 <div class="text-muted small mt-2">Estimasi tunggakan pelanggan aktif</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Advanced Business Analytics Row -->
+<div class="row g-3 mb-4">
+    <!-- Card 1: Proyeksi Keuangan (MRR vs Realisasi vs Piutang) -->
+    <div class="col-lg-6">
+        <div class="card chart-card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                    <h5 class="fw-bold mb-0 text-slate-800">
+                        <i class="bi bi-graph-up-arrow text-primary me-2"></i>Proyeksi Keuangan (MRR)
+                    </h5>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1.5 rounded-pill small">
+                            MRR: Rp {{ number_format($businessStats['current_mrr'], 0, ',', '.') }}
+                        </span>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1.5 rounded-pill small">
+                            Realisasi: Rp {{ number_format($businessStats['realisasi_bulan_ini'], 0, ',', '.') }}
+                        </span>
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1.5 rounded-pill small">
+                            Piutang: Rp {{ number_format($businessStats['piutang_bulan_ini'], 0, ',', '.') }}
+                        </span>
+                    </div>
+                </div>
+                <div class="text-muted small mb-3">Tren pemasukan riil dibandingkan estimasi piutang dan target bulanan (MRR) 6 bulan terakhir.</div>
+                <div class="chart-wrap">
+                    <canvas id="financialChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Status & Pertumbuhan Pelanggan -->
+    <div class="col-lg-6">
+        <div class="card chart-card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+                    <h5 class="fw-bold mb-0 text-slate-800">
+                        <i class="bi bi-people text-info me-2"></i>Status & Tren Pelanggan
+                    </h5>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1.5 rounded-pill small">
+                            Aktif: {{ $businessStats['aktif_count'] }}
+                        </span>
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1.5 rounded-pill small">
+                            Churn: {{ $businessStats['churn_count'] }}
+                        </span>
+                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1.5 rounded-pill small">
+                            Rate: {{ $businessStats['churn_rate'] }}%
+                        </span>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1.5 rounded-pill small">
+                            Baru: +{{ $businessStats['baru_count'] }}
+                        </span>
+                    </div>
+                </div>
+                <div class="text-muted small mb-3">Proporsi perbandingan status pelanggan aktif terhadap pelanggan yang berhenti berlangganan (churn/expired).</div>
+                <div class="chart-wrap">
+                    <canvas id="customerChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -192,15 +272,119 @@
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ asset('vendor/js/chart.umd.min.js') }}"></script>
 <script>
     const pieLabels = @json($pieLabels);
     const pieValues = @json($pieValues);
     const barLabels = @json($barLabels);
     const barValues = @json($barValues);
+    const businessStats = @json($businessStats);
 
     const pieCanvas = document.getElementById('pieChart');
     const barCanvas = document.getElementById('barChart');
+    const financialCanvas = document.getElementById('financialChart');
+    const customerCanvas = document.getElementById('customerChart');
+
+    if (financialCanvas && businessStats && businessStats.history) {
+        const histLabels = businessStats.history.map(item => item.label);
+        const histRealisasi = businessStats.history.map(item => item.realisasi);
+        const histMrr = businessStats.history.map(item => item.mrr);
+        const histPiutang = businessStats.history.map(item => item.piutang);
+
+        new Chart(financialCanvas, {
+            type: 'bar',
+            data: {
+                labels: histLabels,
+                datasets: [
+                    {
+                        label: 'Proyeksi Target (MRR)',
+                        data: histMrr,
+                        type: 'line',
+                        borderColor: '#0f172a',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointBackgroundColor: '#0f172a',
+                        tension: 0.1,
+                        order: 1
+                    },
+                    {
+                        label: 'Realisasi Pendapatan',
+                        data: histRealisasi,
+                        backgroundColor: '#10b981',
+                        borderRadius: 6,
+                        order: 2
+                    },
+                    {
+                        label: 'Estimasi Piutang',
+                        data: histPiutang,
+                        backgroundColor: '#ef4444',
+                        borderRadius: 6,
+                        order: 3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(148, 163, 184, 0.25)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return 'Rp ' + Number(value).toLocaleString('id-ID');
+                            }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            boxWidth: 8
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    if (customerCanvas && businessStats) {
+        new Chart(customerCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Aktif', 'Churn/Expired'],
+                datasets: [{
+                    data: [businessStats.aktif_count, businessStats.churn_count],
+                    backgroundColor: ['#10b981', '#64748b'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            boxWidth: 10
+                        }
+                    }
+                },
+                cutout: '65%'
+            }
+        });
+    }
 
     if (pieCanvas) {
         new Chart(pieCanvas, {

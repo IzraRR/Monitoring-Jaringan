@@ -99,7 +99,11 @@
                             <option value="">Pilih pelanggan</option>
                             @foreach($pelangganOptions as $pelanggan)
                                 <option value="{{ $pelanggan->id_pelanggan }}" data-harga="{{ $pelanggan->paket->harga ?? 0 }}" data-paket="{{ $pelanggan->paket->nama_paket ?? '-' }}" data-masa-aktif="{{ optional($pelanggan->masa_aktif)->format('Y-m-d') }}" @selected((string) old('id_pelanggan') === (string) $pelanggan->id_pelanggan)>
-                                    {{ $pelanggan->nama_pelanggan }} ({{ $pelanggan->username_mikrotik }})
+                                    @php
+                                        $namaPaket = $pelanggan->paket->nama_paket ?? '';
+                                        $tipe = \Illuminate\Support\Str::contains(strtolower($namaPaket), 'pppoe') ? 'PPPoE' : 'Hotspot';
+                                    @endphp
+                                    {{ $pelanggan->nama_pelanggan }} ({{ $pelanggan->username_mikrotik }} - {{ $tipe }})
                                 </option>
                             @endforeach
                         </select>
@@ -177,7 +181,19 @@
                         <tr>
                             <td>PMB_{{ str_pad((string) $item->id_pembayaran, 3, '0', STR_PAD_LEFT) }}</td>
                             <td>{{ $item->id_pelanggan }}</td>
-                            <td>{{ $item->pelanggan->nama_pelanggan ?? '-' }}</td>
+                             <td>
+                                 {{ $item->pelanggan->nama_pelanggan ?? '-' }}
+                                 @php
+                                     $namaPaket = $item->pelanggan->paket->nama_paket ?? '';
+                                     $isPppoe = \Illuminate\Support\Str::contains(strtolower($namaPaket), 'pppoe');
+                                 @endphp
+                                 @if($namaPaket)
+                                     <br>
+                                     <span class="badge {{ $isPppoe ? 'bg-info text-dark' : 'bg-primary' }} small" style="font-size: 0.75rem;">
+                                         {{ $isPppoe ? 'PPPoE' : 'Hotspot' }}
+                                     </span>
+                                 @endif
+                             </td>
                             <td>{{ $item->periode_tagihan }}</td>
                             <td>{{ optional($item->tanggal_bayar)->translatedFormat('d F Y') ?? '-' }}</td>
                             <td>{{ number_format($item->nominal, 0, ',', '.') }}</td>

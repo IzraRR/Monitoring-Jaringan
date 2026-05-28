@@ -16,7 +16,11 @@
                 <select name="id_pelanggan" class="form-select" required>
                     <option value="">Pilih Pelanggan</option>
                     @foreach($pelangganOptions as $pelanggan)
-                        <option value="{{ $pelanggan->id_pelanggan }}" @selected(old('id_pelanggan', $pembayaran->id_pelanggan) == $pelanggan->id_pelanggan)>{{ $pelanggan->nama_pelanggan }} ({{ $pelanggan->username_mikrotik }})</option>
+                        @php
+                            $namaPaket = $pelanggan->paket->nama_paket ?? '';
+                            $tipe = \Illuminate\Support\Str::contains(strtolower($namaPaket), 'pppoe') ? 'PPPoE' : 'Hotspot';
+                        @endphp
+                        <option value="{{ $pelanggan->id_pelanggan }}" @selected(old('id_pelanggan', $pembayaran->id_pelanggan) == $pelanggan->id_pelanggan)>{{ $pelanggan->nama_pelanggan }} ({{ $pelanggan->username_mikrotik }} - {{ $tipe }})</option>
                     @endforeach
                 </select>
             </div>

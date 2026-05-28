@@ -62,10 +62,24 @@
 
 <div class="row">
     <div class="col-md-9 mb-4">
-        <div class="card border-0 shadow-sm rounded-3" style="background-color: #e2e8f0;">
-            <div class="card-body">
-                <h6 class="fw-bold text-secondary mb-3">Traffic Interface Real-Time (RX/TX)</h6>
-                <div style="height: 300px;">
+        <div class="card border-0 shadow-sm rounded-3 h-100" style="background-color: #e2e8f0;">
+            <div class="card-body d-flex flex-column">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold text-secondary mb-0">Traffic Interface Real-Time (RX/TX)</h6>
+                    <div style="width: 280px;">
+                        <select id="select-pelanggan" class="form-select form-select-sm border-dark border-1 fw-bold" style="border-radius: 8px;">
+                            <option value="">Semua (All)</option>
+                            @foreach($pelangganOptions as $p)
+                                @php
+                                    $namaPaket = $p->paket->nama_paket ?? '';
+                                    $tipe = \Illuminate\Support\Str::contains(strtolower($namaPaket), 'pppoe') ? 'PPPoE' : 'Hotspot';
+                                @endphp
+                                <option value="{{ $p->id_pelanggan }}">{{ $p->nama_pelanggan }} ({{ $p->username_mikrotik }} - {{ $tipe }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="flex-grow-1" style="min-height: 350px; position: relative;">
                     <canvas id="trafficChart"></canvas>
                 </div>
             </div>
@@ -138,10 +152,10 @@
 @endsection
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ asset('vendor/js/chart.umd.min.js') }}"></script>
 <script>
     // Define endpoint untuk dashboard monitor
     const realtimeEndpoint = @json(route('dashboard.realtime-stats'));
 </script>
-<script src="{{ asset('js/dashboard.js') }}"></script>
+<script src="{{ asset('js/dashboard.js') }}?v={{ filemtime(public_path('js/dashboard.js')) }}"></script>
 @endpush

@@ -17,10 +17,16 @@ class DashboardMonitor {
     }
 
     init() {
-        this.initChart();
         this.loadThresholdsFromLocalStorage();
         this.updateThresholdDisplay();
         this.updateAlertMuteDisplay();
+        this.restoreSelectedPelanggan();
+
+        const selectPelanggan = document.getElementById('select-pelanggan');
+        this.currentPelangganId = selectPelanggan ? selectPelanggan.value : '';
+
+        this.initChart();
+        this.initBusinessCharts();
         this.bindEventListeners();
         this.startPolling();
     }
@@ -82,6 +88,44 @@ class DashboardMonitor {
                 }
             }
         });
+
+        this.loadChartHistoryFromLocalStorage();
+    }
+
+    saveChartHistoryToLocalStorage() {
+        if (!this.chart) return;
+        const key = `traffic_chart_history_${this.currentPelangganId || 'all'}`;
+        const history = {
+            labels: this.chart.data.labels,
+            rx: this.chart.data.datasets[0].data,
+            tx: this.chart.data.datasets[1].data
+        };
+        localStorage.setItem(key, JSON.stringify(history));
+    }
+
+    loadChartHistoryFromLocalStorage() {
+        if (!this.chart) return;
+        const key = `traffic_chart_history_${this.currentPelangganId || 'all'}`;
+        try {
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                const history = JSON.parse(saved);
+                if (history && Array.isArray(history.labels) && Array.isArray(history.rx) && Array.isArray(history.tx)) {
+                    this.chart.data.labels = history.labels;
+                    this.chart.data.datasets[0].data = history.rx;
+                    this.chart.data.datasets[1].data = history.tx;
+                    this.chart.update('none');
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('Gagal memuat riwayat grafik dari localStorage:', e);
+        }
+        // Fallback jika tidak ada data tersimpan
+        this.chart.data.labels = [];
+        this.chart.data.datasets[0].data = [];
+        this.chart.data.datasets[1].data = [];
+        this.chart.update('none');
     }
 
     updateTrafficChart(snapshot) {
@@ -104,6 +148,7 @@ class DashboardMonitor {
         }
 
         this.chart.update('none');
+        this.saveChartHistoryToLocalStorage();
     }
 
     updateRealtimeCards(data) {
@@ -152,6 +197,8 @@ class DashboardMonitor {
 
         if (!isOffline) {
             this.updateTrafficChart(data);
+        } else {
+            this.updateTrafficChart({ rx_bps: 0, tx_bps: 0 });
         }
 
         this.handleTrafficThresholdAlert(data, isOffline);
@@ -164,7 +211,15 @@ class DashboardMonitor {
 
     async loadRealtimeStats() {
         try {
-            const response = await fetch(this.realtimeEndpoint, {
+            let url = this.realtimeEndpoint;
+            const selectPelanggan = document.getElementById('select-pelanggan');
+            if (selectPelanggan && selectPelanggan.value) {
+                const urlObj = new URL(url, window.location.origin);
+                urlObj.searchParams.set('id_pelanggan', selectPelanggan.value);
+                url = urlObj.pathname + urlObj.search;
+            }
+
+            const response = await fetch(url, {
                 headers: { 'Accept': 'application/json' }
             });
 
@@ -193,6 +248,19 @@ class DashboardMonitor {
         const thresholds = window.TrafficAlertUtils?.loadThresholds?.() || { maxRxBps: 0, maxTxBps: 0 };
         this.maxRxBps = Number(thresholds.maxRxBps) || 0;
         this.maxTxBps = Number(thresholds.maxTxBps) || 0;
+    }
+
+    restoreSelectedPelanggan() {
+        const selectPelanggan = document.getElementById('select-pelanggan');
+        if (selectPelanggan) {
+            const savedValue = localStorage.getItem('dashboard_selected_pelanggan');
+            if (savedValue !== null) {
+                const optionExists = Array.from(selectPelanggan.options).some(option => option.value === savedValue);
+                if (optionExists) {
+                    selectPelanggan.value = savedValue;
+                }
+            }
+        }
     }
 
     saveThresholdsToLocalStorage() {
@@ -253,12 +321,166 @@ class DashboardMonitor {
             });
         }
 
+        const selectPelanggan = document.getElementById('select-pelanggan');
+        if (selectPelanggan) {
+            selectPelanggan.addEventListener('change', () => {
+                localStorage.setItem('dashboard_selected_pelanggan', selectPelanggan.value);
+                
+                // Simpan riwayat grafik pelanggan lama
+                this.saveChartHistoryToLocalStorage();
+                
+                // Update currentPelangganId ke nilai baru
+                this.currentPelangganId = selectPelanggan.value;
+                
+                // Muat riwayat grafik milik pelanggan baru
+                this.loadChartHistoryFromLocalStorage();
+                
+                // Muat status/kartu realtime secara instan
+                this.loadRealtimeStats();
+            });
+        }
+
         window.TrafficAlertUtils?.bindMuteToggle?.('#btn-toggle-alert-mute');
     }
 
     startPolling() {
-        this.loadRealtimeStats();
-        setInterval(() => this.loadRealtimeStats(), this.pollingInterval);
+        if (this.pollTimeout) {
+            clearTimeout(this.pollTimeout);
+        }
+
+        const poll = async () => {
+            const startTime = Date.now();
+            try {
+                await this.loadRealtimeStats();
+            } catch (err) {
+                console.error('Error selama pemrosesan polling:', err);
+            } finally {
+                const selectPelanggan = document.getElementById('select-pelanggan');
+                // Jika pelanggan disaring, poll lebih cepat (1.5 detik) untuk menangkap perubahan speedtest yang singkat
+                const baseInterval = (selectPelanggan && selectPelanggan.value) ? 1500 : this.pollingInterval;
+                
+                // Hitung sisa waktu delay setelah dikurangi durasi eksekusi API (drift correction)
+                const elapsed = Date.now() - startTime;
+                const nextDelay = Math.max(50, baseInterval - elapsed); // Minimal jeda 50ms untuk menghindari loop tanpa batas
+                
+                this.pollTimeout = setTimeout(poll, nextDelay);
+            }
+        };
+
+        poll();
+    }
+
+    initBusinessCharts() {
+        if (typeof businessStatsData === 'undefined') return;
+
+        const financialCtx = document.getElementById('financialChart');
+        if (financialCtx) {
+            new Chart(financialCtx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: businessStatsData.financial_labels || [],
+                    datasets: [
+                        {
+                            label: 'Realisasi Pemasukan (Rp)',
+                            data: businessStatsData.financial_realisasi || [],
+                            backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                            borderColor: '#10b981',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Piutang / Belum Bayar (Rp)',
+                            data: businessStatsData.financial_piutang || [],
+                            backgroundColor: 'rgba(239, 68, 68, 0.85)',
+                            borderColor: '#ef4444',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Proyeksi MRR (Rp)',
+                            data: businessStatsData.financial_mrr || [],
+                            type: 'line',
+                            borderColor: '#0f172a',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.1,
+                            pointRadius: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    if (value >= 1000000) return 'Rp ' + (value / 1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return 'Rp ' + (value / 1000).toFixed(0) + 'k';
+                                    return 'Rp ' + value;
+                                }
+                            }
+                        },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', align: 'start' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const v = context.raw;
+                                    return context.dataset.label + ': Rp ' + Number(v).toLocaleString('id-ID');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        const customerCtx = document.getElementById('customerChart');
+        if (customerCtx) {
+            new Chart(customerCtx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Pelanggan Aktif', 'Pelanggan Churn / Expired'],
+                    datasets: [
+                        {
+                            data: [
+                                businessStatsData.active_count || 0,
+                                businessStatsData.churned_count || 0
+                            ],
+                            backgroundColor: [
+                                '#10b981',
+                                '#94a3b8'
+                            ],
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const v = context.raw;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+                                    return context.label + ': ' + v + ' (' + pct + '%)';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 

@@ -54,7 +54,7 @@ class PembayaranController extends Controller
     public function create(): View
     {
         return view('pembayaran.create', [
-            'pelangganOptions' => Pelanggan::orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik', 'masa_aktif']),
+            'pelangganOptions' => Pelanggan::with('paket')->orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik', 'masa_aktif', 'id_paket']),
         ]);
     }
 
@@ -196,7 +196,7 @@ class PembayaranController extends Controller
     {
         return view('pembayaran.edit', [
             'pembayaran' => $pembayaran,
-            'pelangganOptions' => Pelanggan::orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik', 'masa_aktif']),
+            'pelangganOptions' => Pelanggan::with('paket')->orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik', 'masa_aktif', 'id_paket']),
         ]);
     }
 
@@ -231,6 +231,9 @@ class PembayaranController extends Controller
 
     public function sendNotifications(Request $request)
     {
+        if ($request->ajax() || $request->expectsJson()) {
+            session()->reflash();
+        }
         try {
             Artisan::call('app:kirim-tagihan-wa');
             $output = Artisan::output();
@@ -264,7 +267,7 @@ class PembayaranController extends Controller
             }
 
             return back()
-                ->with('danger', 'Terjadi error saat menjalankan proses notifikasi. Silakan cek log untuk detail.');
+                ->with('error', 'Terjadi error saat menjalankan proses notifikasi. Silakan cek log untuk detail.');
         }
     }
 

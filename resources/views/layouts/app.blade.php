@@ -6,8 +6,9 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Monitoring SMKN 53')</title>
     
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="{{ asset('vendor/css/bootstrap.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('vendor/css/bootstrap-icons.css') }}">
+    <script src="{{ asset('vendor/js/sweetalert2.all.min.js') }}"></script>
     <style>
         :root {
             --navy: #17395f;
@@ -317,8 +318,7 @@
         </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ asset('vendor/js/bootstrap.bundle.min.js') }}"></script>
 <script>
     document.querySelectorAll('.toggle-password').forEach(function (button) {
         button.addEventListener('click', function () {

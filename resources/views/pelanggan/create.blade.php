@@ -18,6 +18,10 @@
                 <label class="form-label">No HP</label>
                 <input type="text" name="no_hp" value="{{ old('no_hp') }}" class="form-control" required>
             </div>
+            <div class="col-md-12">
+                <label class="form-label">Alamat Pelanggan</label>
+                <input type="text" name="alamat" value="{{ old('alamat') }}" class="form-control" placeholder="Masukkan alamat lengkap pelanggan">
+            </div>
             <div class="col-md-6">
                 <label class="form-label">Username MikroTik</label>
                 <input type="text" name="username_mikrotik" value="{{ old('username_mikrotik') }}" class="form-control" required>

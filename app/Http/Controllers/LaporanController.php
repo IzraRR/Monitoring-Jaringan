@@ -93,6 +93,98 @@ class LaporanController extends Controller
             ->orderBy('bulan_key')
             ->get();
 
+        // 1. Current MRR (expected monthly recurring revenue from active subscriptions)
+        $currentMrr = Pelanggan::where('pelanggan.status_aktif', 'Aktif')
+            ->join('paket_bandwidth', 'pelanggan.id_paket', '=', 'paket_bandwidth.id_paket')
+            ->sum('paket_bandwidth.harga');
+
+        // 2. Realisasi Bulan Ini (actual payment nominal recorded in this month)
+        $realisasiBulanIni = Pembayaran::whereYear('tanggal_bayar', now()->year)
+            ->whereMonth('tanggal_bayar', now()->month)
+            ->sum('nominal');
+
+        // 3. Piutang Bulan Ini (unpaid packages for active customers in the current month)
+        $pelangganBelumBayarBulanIni = Pelanggan::where('pelanggan.status_aktif', 'Aktif')
+            ->whereDoesntHave('pembayaran', function ($query) {
+                $query->whereYear('tanggal_bayar', now()->year)
+                    ->whereMonth('tanggal_bayar', now()->month);
+            })->with('paket')->get();
+
+        $piutangBulanIni = $pelangganBelumBayarBulanIni->sum(function ($p) {
+            return (float) optional($p->paket)->harga;
+        });
+
+        // 4. Customer counts & Churn Rate
+        $activeCustomersCount = Pelanggan::where('status_aktif', 'Aktif')->count();
+        $churnedCustomersCount = Pelanggan::whereIn('status_aktif', ['Nonaktif', 'Locked'])->count();
+        $totalCustomersCount = $activeCustomersCount + $churnedCustomersCount;
+        $churnRatePercent = $totalCustomersCount > 0 ? round(($churnedCustomersCount / $totalCustomersCount) * 100, 1) : 0;
+        $newCustomersBulanIni = Pelanggan::whereYear('created_at', now()->year)
+            ->whereMonth('created_at', now()->month)
+            ->count();
+
+        // 5. 6-Month History of collections, MRR, and receivables
+        $financialHistory = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $monthDate = now()->subMonths($i);
+            $year = $monthDate->year;
+            $month = $monthDate->month;
+            $monthLabel = $monthDate->translatedFormat('F Y'); // Full indonesian month name
+
+            $endOfMonth = $monthDate->copy()->endOfMonth();
+
+            // Realisasi
+            $histRealisasi = Pembayaran::whereYear('tanggal_bayar', $year)
+                ->whereMonth('tanggal_bayar', $month)
+                ->sum('nominal');
+
+            // Expected MRR
+            $histMrr = Pelanggan::where(function($q) use ($endOfMonth) {
+                    $q->whereNull('pelanggan.created_at')
+                      ->orWhere('pelanggan.created_at', '<=', $endOfMonth);
+                })
+                ->where(function($q) use ($year, $month) {
+                    $q->where('pelanggan.status_aktif', 'Aktif')
+                      ->orWhereHas('pembayaran', function($sub) use ($year, $month) {
+                          $sub->whereYear('tanggal_bayar', $year)
+                              ->whereMonth('tanggal_bayar', $month);
+                      });
+                })
+                ->join('paket_bandwidth', 'pelanggan.id_paket', '=', 'paket_bandwidth.id_paket')
+                ->sum('paket_bandwidth.harga');
+
+            // Piutang: active customers created <= endOfMonth, who didn't pay in that month
+            $histPiutang = Pelanggan::where(function($q) use ($endOfMonth) {
+                    $q->whereNull('pelanggan.created_at')
+                      ->orWhere('pelanggan.created_at', '<=', $endOfMonth);
+                })
+                ->where('pelanggan.status_aktif', 'Aktif')
+                ->whereDoesntHave('pembayaran', function($sub) use ($year, $month) {
+                    $sub->whereYear('tanggal_bayar', $year)
+                        ->whereMonth('tanggal_bayar', $month);
+                })
+                ->join('paket_bandwidth', 'pelanggan.id_paket', '=', 'paket_bandwidth.id_paket')
+                ->sum('paket_bandwidth.harga');
+
+            $financialHistory[] = [
+                'label' => $monthLabel,
+                'realisasi' => (float) $histRealisasi,
+                'mrr' => (float) $histMrr,
+                'piutang' => (float) $histPiutang,
+            ];
+        }
+
+        $businessStats = [
+            'current_mrr' => $currentMrr,
+            'realisasi_bulan_ini' => $realisasiBulanIni,
+            'piutang_bulan_ini' => $piutangBulanIni,
+            'aktif_count' => $activeCustomersCount,
+            'churn_count' => $churnedCustomersCount,
+            'churn_rate' => $churnRatePercent,
+            'baru_count' => $newCustomersBulanIni,
+            'history' => $financialHistory,
+        ];
+
         return view('laporan.index', [
             'summary' => [
                 'total_pemasukan' => $totalPemasukan,
@@ -107,6 +199,7 @@ class LaporanController extends Controller
             'startDate' => $startDate,
             'endDate' => $endDate,
             'transaksiLaporan' => $transaksiLaporan,
+            'businessStats' => $businessStats,
         ]);
     }
 

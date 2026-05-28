@@ -1,0 +1,15 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Avoid infinite loop: stop if we already set the LOOP_STOP environment variable
+    RewriteCond %{ENV:LOOP_STOP} 1 [OR]
+    RewriteCond %{ENV:REDIRECT_LOOP_STOP} 1
+    RewriteRule ^ - [L]
+    
+    # Exclude unzip.php and project.zip from being rewritten
+    RewriteCond %{REQUEST_URI} !^/unzip\.php$
+    RewriteCond %{REQUEST_URI} !^/project\.zip$
+    
+    # Rewrite all remaining requests to the public/ directory and set LOOP_STOP
+    RewriteRule ^(.*)$ public/$1 [L,E=LOOP_STOP:1]
+</IfModule>

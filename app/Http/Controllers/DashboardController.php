@@ -74,6 +74,8 @@ class DashboardController extends Controller
             }
         );
 
+        $pelangganOptions = Pelanggan::with('paket')->orderBy('nama_pelanggan')->get(['id_pelanggan', 'nama_pelanggan', 'username_mikrotik', 'id_paket']);
+
         return view('dashboard', [
             'stats' => $stats,
             'trafficLabels' => $trafficSeries->pluck('tanggal')->map(fn ($value) => date('d M', strtotime($value)))->values(),
@@ -81,12 +83,21 @@ class DashboardController extends Controller
             'anomaliHariIni' => $stats['anomali_hari_ini'],
             'mikrotik' => $mikrotik,
             'recentPayments' => $recentPayments,
+            'pelangganOptions' => $pelangganOptions,
         ]);
     }
 
     public function getRealtimeStats(MikrotikService $mikrotikService): JsonResponse
     {
+        session()->reflash();
         try {
+            $idPelanggan = request()->query('id_pelanggan');
+
+            if (!empty($idPelanggan)) {
+                $stats = $mikrotikService->getPelangganRealtimeStats($idPelanggan);
+                return response()->json($stats);
+            }
+
             // Cache realtime stats for 1 minute only
             $stats = $this->cacheService->cacheMikrotikRealtimeStats(function () use ($mikrotikService) {
                 return $mikrotikService->getRealtimeStats();

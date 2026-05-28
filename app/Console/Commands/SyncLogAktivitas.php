@@ -21,39 +21,42 @@ class SyncLogAktivitas extends Command
             return Command::SUCCESS;
         }
 
-        // Lama: hanya membaca hotspot aktif
-        // $sessions = $mikrotikService->comm('/ip/hotspot/active/print') ?: [];
-
-        // Baru: baca kedua sumber sesi (Hotspot + PPPoE) sehingga PPPoE juga tercatat
+        // Ambil sesi aktif (Hotspot + PPPoE)
         $hotspotSessions = $mikrotikService->comm('/ip/hotspot/active/print') ?: [];
         $pppoeSessions = $mikrotikService->comm('/ppp/active/print') ?: [];
 
         $sessions = [];
-
         foreach ($hotspotSessions as $s) {
             $sessions[] = ['type' => 'Hotspot', 'raw' => $s];
         }
-
         foreach ($pppoeSessions as $s) {
             $sessions[] = ['type' => 'PPPoE', 'raw' => $s];
         }
 
-        if (empty($sessions)) {
-            $this->info('Tidak ada sesi aktif (Hotspot/PPPoE) yang ditemukan.');
-            return Command::SUCCESS;
+        // Ambil Simple Queues untuk mengambil data bytes (terutama untuk PPPoE yang tidak memuat bytes di session print)
+        $queues = $mikrotikService->comm('/queue/simple/print') ?: [];
+        $queuesMap = [];
+        foreach ($queues as $q) {
+            if (isset($q['name'])) {
+                $queuesMap[strtolower($q['name'])] = $q;
+            }
         }
 
         $today = now()->toDateString();
         $processed = 0;
         $created = 0;
         $updated = 0;
+        $restarted = 0;
         $skipped = 0;
+
+        // Map untuk menampung pelanggan yang saat ini aktif di MikroTik
+        $activeCustomerIds = [];
 
         foreach ($sessions as $entry) {
             $type = $entry['type'] ?? 'Hotspot';
             $hotspotUser = $entry['raw'] ?? [];
 
-            // Hotspot menggunakan field 'user', sedangkan PPPoE menggunakan field 'name'
+            // Hotspot menggunakan 'user', PPPoE menggunakan 'name'
             $username = trim((string) ($hotspotUser['user'] ?? $hotspotUser['name'] ?? ''));
             if ($username === '') {
                 $skipped++;
@@ -67,61 +70,135 @@ class SyncLogAktivitas extends Command
 
             if (!$pelanggan) {
                 $skipped++;
-                Log::info('SyncLogAktivitas: pelanggan tidak ditemukan untuk sesi hotspot aktif', [
+                Log::info('SyncLogAktivitas: pelanggan tidak ditemukan untuk sesi aktif', [
                     'username' => $username,
                 ]);
                 continue;
             }
 
-            // Field bytes biasanya 'bytes-in' / 'bytes-out', tapi gunakan fallback defensif
+            // Dapatkan bytes upload/download
             $bytesIn = (int) ($hotspotUser['bytes-in'] ?? $hotspotUser['bytes_in'] ?? 0);
             $bytesOut = (int) ($hotspotUser['bytes-out'] ?? $hotspotUser['bytes_out'] ?? 0);
+
+            // Fallback ke Simple Queue jika bytes 0 (kasus umum untuk PPPoE)
+            if ($bytesIn === 0 && $bytesOut === 0) {
+                $matchedQueue = null;
+                $lowerUser = strtolower($username);
+                if (isset($queuesMap[$lowerUser])) {
+                    $matchedQueue = $queuesMap[$lowerUser];
+                } else {
+                    foreach ($queuesMap as $qName => $qData) {
+                        if (strpos($qName, $lowerUser) !== false) {
+                            $matchedQueue = $qData;
+                            break;
+                        }
+                    }
+                }
+
+                if ($matchedQueue && isset($matchedQueue['bytes']) && strpos($matchedQueue['bytes'], '/') !== false) {
+                    $bytesParts = explode('/', $matchedQueue['bytes']);
+                    $bytesIn = (int)$bytesParts[0]; // upload
+                    $bytesOut = (int)$bytesParts[1]; // download
+                }
+            }
+
             $dataUsageMb = ($bytesIn + $bytesOut) / 1048576;
 
-            // Uptime field biasanya 'uptime' but fallback to 'session-time' if available
+            // Dapatkan uptime
             $uptimeRaw = (string) ($hotspotUser['uptime'] ?? $hotspotUser['session-time'] ?? '0s');
             $durasiMenit = $this->parseUptimeToMinutes($uptimeRaw);
             $isAnomali = $dataUsageMb > 1000;
 
-            // IP field may differ: hotspot uses 'address', pppoe may use 'address' or 'remote-address'
+            // Dapatkan IP address
             $ipAddress = trim((string) ($hotspotUser['address'] ?? $hotspotUser['remote-address'] ?? ''));
 
+            $activeCustomerIds[$pelanggan->id_pelanggan] = [
+                'id_paket' => $pelanggan->id_paket,
+                'ip_address' => $ipAddress,
+                'data_usage_mb' => $dataUsageMb,
+                'durasi_menit' => $durasiMenit,
+                'is_anomali' => $isAnomali,
+            ];
+        }
+
+        // 1. TUTUP SESI LOG untuk pelanggan yang sudah DISCONNECT
+        // Ambil semua log yang masih berjalan (waktu_selesai IS NULL)
+        $openLogs = LogAktivitas::query()->whereNull('waktu_selesai')->get();
+        foreach ($openLogs as $log) {
+            // Jika pelanggan tidak ada di daftar aktif saat ini, tutup sesi lognya
+            if (!isset($activeCustomerIds[$log->id_pelanggan])) {
+                $log->update([
+                    'waktu_selesai' => now(),
+                ]);
+            }
+        }
+
+        // 2. UPDATE / BUAT LOG BARU untuk pelanggan yang aktif
+        foreach ($activeCustomerIds as $idPelanggan => $data) {
+            // Cari sesi log yang masih terbuka untuk pelanggan ini
             $existingLog = LogAktivitas::query()
-                ->where('id_pelanggan', $pelanggan->id_pelanggan)
-                ->whereDate('waktu_mulai', $today)
+                ->where('id_pelanggan', $idPelanggan)
                 ->whereNull('waktu_selesai')
+                ->orderByDesc('waktu_mulai')
                 ->first();
 
             if ($existingLog) {
-                $existingLog->update([
-                    'data_usage_mb' => $dataUsageMb,
-                    'durasi_menit' => $durasiMenit,
-                    'is_anomali' => $isAnomali,
-                    'ip_address' => $ipAddress,
-                ]);
-                $updated++;
-            } else {
-                LogAktivitas::updateOrCreate(
-                    [
-                        'id_pelanggan' => $pelanggan->id_pelanggan,
-                        'waktu_selesai' => null,
-                    ],
-                    [
-                        'id_paket' => $pelanggan->id_paket,
+                // Jika durasi/traffic menurun atau IP berubah, anggap sesi baru dimulai.
+                // Ini membuat satu pelanggan bisa memiliki banyak log aktivitas per sesi.
+                $sessionRestarted = ($data['durasi_menit'] < (int) ($existingLog->durasi_menit ?? 0))
+                    || ($data['data_usage_mb'] < (float) ($existingLog->data_usage_mb ?? 0))
+                    || (
+                        !empty($data['ip_address'])
+                        && !empty($existingLog->ip_address)
+                        && $data['ip_address'] !== $existingLog->ip_address
+                    );
+
+                if ($sessionRestarted) {
+                    $existingLog->update([
+                        'waktu_selesai' => now(),
+                    ]);
+
+                    LogAktivitas::create([
+                        'id_pelanggan' => $idPelanggan,
+                        'id_paket' => $data['id_paket'],
                         'waktu_mulai' => now(),
-                        'ip_address' => $ipAddress,
-                        'data_usage_mb' => $dataUsageMb,
-                        'durasi_menit' => $durasiMenit,
-                        'is_anomali' => $isAnomali,
-                    ]
-                );
+                        'waktu_selesai' => null,
+                        'ip_address' => $data['ip_address'],
+                        'data_usage_mb' => $data['data_usage_mb'],
+                        'durasi_menit' => $data['durasi_menit'],
+                        'is_anomali' => $data['is_anomali'],
+                    ]);
+
+                    $restarted++;
+                    $created++;
+                } else {
+                    // Update log sesi aktif yang sedang berjalan
+                    $existingLog->update([
+                        'data_usage_mb' => $data['data_usage_mb'],
+                        'durasi_menit' => $data['durasi_menit'],
+                        'is_anomali' => $data['is_anomali'],
+                        'ip_address' => $data['ip_address'],
+                    ]);
+                    $updated++;
+                }
+            } else {
+                // Buat log sesi baru karena pelanggan baru saja connect
+                LogAktivitas::create([
+                    'id_pelanggan' => $idPelanggan,
+                    'id_paket' => $data['id_paket'],
+                    'waktu_mulai' => now(),
+                    'waktu_selesai' => null,
+                    'ip_address' => $data['ip_address'],
+                    'data_usage_mb' => $data['data_usage_mb'],
+                    'durasi_menit' => $data['durasi_menit'],
+                    'is_anomali' => $data['is_anomali'],
+                ]);
                 $created++;
             }
-
             $processed++;
         }
 
-        $this->info("Sinkron log aktivitas selesai. Diproses: {$processed}, Baru: {$created}, Update: {$updated}, Skip: {$skipped}");
+        $this->info("Sinkron log aktivitas selesai. Diproses: {$processed}, Baru (Connect): {$created}, Restart Sesi: {$restarted}, Update (Aktif): {$updated}, Skip: {$skipped}");
 
         return Command::SUCCESS;
     }

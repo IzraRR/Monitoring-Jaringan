@@ -17,6 +17,7 @@ class Pelanggan extends Model
     protected $fillable = [
         'id_paket',
         'nama_pelanggan',
+        'alamat',
         'no_hp',
         'username_mikrotik',
         'password_mikrotik',
@@ -30,7 +31,6 @@ class Pelanggan extends Model
 
     protected $casts = [
         'masa_aktif' => 'date',
-        'password_mikrotik' => 'encrypted',
     ];
 
     public function paket(): BelongsTo

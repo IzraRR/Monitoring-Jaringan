@@ -41,4 +41,44 @@ class LogAktivitas extends Model
     {
         return $this->belongsTo(PaketBandwidth::class, 'id_paket', 'id_paket');
     }
+
+    public function getDurasiFormattedAttribute(): string
+    {
+        $minutes = $this->durasi_menit;
+        if (!$minutes || $minutes <= 0) {
+            return '0 Menit';
+        }
+
+        $months = (int) floor($minutes / 43200);
+        $minutes %= 43200;
+
+        $weeks = (int) floor($minutes / 10080);
+        $minutes %= 10080;
+
+        $days = (int) floor($minutes / 1440);
+        $minutes %= 1440;
+
+        $hours = (int) floor($minutes / 60);
+        $minutes %= 60;
+
+        $parts = [];
+        if ($months > 0) {
+            $parts[] = $months . ' Bulan';
+        }
+        if ($weeks > 0) {
+            $parts[] = $weeks . ' Minggu';
+        }
+        if ($days > 0) {
+            $parts[] = $days . ' Hari';
+        }
+        if ($hours > 0) {
+            $parts[] = $hours . ' Jam';
+        }
+        if ($minutes > 0 || empty($parts)) {
+            $parts[] = $minutes . ' Menit';
+        }
+
+        return implode(' ', $parts);
+    }
 }
+

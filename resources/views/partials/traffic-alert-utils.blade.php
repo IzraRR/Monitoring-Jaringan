@@ -107,13 +107,35 @@
             Swal.fire({
                 icon: 'warning',
                 title: 'Traffic Berlebih!',
-                text: (rxExceed ? `RX: ${formatTrafficValue(data.rx_bps)}` : '') + (txExceed ? (rxExceed ? ' / ' : '') + `TX: ${formatTrafficValue(data.tx_bps)}` : ''),
+                html: `
+                    <div>${(rxExceed ? `RX: ${formatTrafficValue(data.rx_bps)}` : '') + (txExceed ? (rxExceed ? ' / ' : '') + `TX: ${formatTrafficValue(data.tx_bps)}` : '')}</div>
+                `,
                 toast: true,
                 position: 'top-end',
                 showConfirmButton: false,
                 showCloseButton: true,
                 timer: 5000,
                 timerProgressBar: true,
+                didOpen: (toast) => {
+                    toast.style.cursor = 'pointer';
+                    // Set cursor ke pointer pada elemen teks internal SweetAlert agar hand cursor muncul di seluruh area toast
+                    toast.querySelectorAll('.swal2-title, .swal2-html-container, .swal2-content').forEach(el => {
+                        el.style.cursor = 'pointer';
+                    });
+                    
+                    toast.addEventListener('click', (e) => {
+                        // Jangan redirect jika yang diklik adalah tombol close (x)
+                        if (e.target.closest('.swal2-close')) {
+                            return;
+                        }
+                        
+                        const dashboardUrl = "{{ route('dashboard') }}";
+                        // Hanya redirect jika tidak sedang berada di halaman dashboard
+                        if (window.location.href.split('?')[0] !== dashboardUrl.split('?')[0]) {
+                            window.location.href = dashboardUrl;
+                        }
+                    });
+                }
             });
         }
 
@@ -191,8 +213,20 @@
             }
 
             button.addEventListener('click', function () {
-                toggleAlertMuteState();
+                const isMuted = toggleAlertMuteState();
                 updateAlertMuteDisplay();
+
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: isMuted ? 'warning' : 'success',
+                        title: isMuted ? 'Peringatan disenyapkan (Muted)' : 'Peringatan diaktifkan kembali',
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 2500,
+                        timerProgressBar: true
+                    });
+                }
             });
         }
 

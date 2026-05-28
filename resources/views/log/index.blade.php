@@ -35,7 +35,7 @@
     <div class="card-header bg-white border-bottom-0 pt-4 pb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="d-flex flex-column" style="width: 250px;">
             <form id="log-search-form" action="{{ route('log.index') }}" method="GET" class="d-flex w-100">
-                <input type="text" id="log-q" name="q" value="{{ $search }}" class="form-control border-dark border-2" placeholder="Cari pelanggan" style="border-radius: 8px 0 0 8px;" autocomplete="off">
+                <input type="text" id="log-q" name="q" value="{{ $search }}" class="form-control border-dark border-2" placeholder="Cari berdasarkan Pelanggan/IP" style="border-radius: 8px 0 0 8px;" autocomplete="off">
                 <button class="btn btn-outline-dark border-2 fw-bold" type="submit" style="border-radius: 0 8px 8px 0;"><i class="bi bi-search"></i></button>
             </form>
             <small id="log-search-indicator" class="text-muted mt-1 d-none"><span class="spinner-border spinner-border-sm me-1" role="status" style="width: 12px; height: 12px;"></span>Mencari...</small>
@@ -58,12 +58,13 @@
                 <table class="table table-bordered table-hover mb-0 text-center align-middle" style="border-color: #475569;">
                     <thead style="background-color: #cbd5e1; color: black;">
                         <tr>
-                            <th>Timestamp</th>
+                            <th>Waktu Login</th>
                             <th>Pelanggan</th>
                             <th>IP Address</th>
                             <th>Tipe Akses</th>
                             <th>Durasi / Trafik</th>
                             <th>Status</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
                     <tbody class="fw-medium text-dark">
@@ -82,18 +83,74 @@
                                     <span class="badge bg-info text-dark">{{ $liveIp }}</span>
                                 @endif
                             </td>
-                            <td><span class="badge bg-secondary">{{ optional(optional($log->pelanggan)->paket)->nama_paket ?? '-' }}</span></td>
-                            <td>{{ $log->durasi_menit ?? 0 }} Menit <br> <small class="text-muted">{{ number_format($log->data_usage_mb, 2) }} MB</small></td>
+                            <td>
+                                @php
+                                    $namaPaket = optional(optional($log->paket)->nama_paket ?? optional($log->pelanggan)->paket)->nama_paket ?? '';
+                                    $isPppoe = \Illuminate\Support\Str::contains(strtolower($namaPaket), 'pppoe');
+                                    $tipeKoneksi = $isPppoe ? 'PPPoE' : 'Hotspot';
+
+                                    // Tipe Akses berdasarkan session state & status pelanggan
+                                    $statusAkses = 'Logout';
+                                    $statusColor = 'bg-secondary';
+
+                                    if (is_null($log->waktu_selesai)) {
+                                        $statusAkses = 'Login';
+                                        $statusColor = 'bg-success';
+                                    }
+
+                                    if (optional($log->pelanggan)->status_aktif === 'nonaktif') {
+                                        $statusAkses = 'Blocked';
+                                        $statusColor = 'bg-danger';
+                                    } elseif (\Illuminate\Support\Str::contains(strtolower($namaPaket), 'cbt') || \Illuminate\Support\Str::contains(strtolower($namaPaket), 'ujian')) {
+                                        $statusAkses = 'CBT_Ujian';
+                                        $statusColor = 'bg-warning text-dark';
+                                    }
+                                @endphp
+                                <span class="badge {{ $statusColor }}">{{ $statusAkses }}</span>
+                                <br>
+                                <span class="badge {{ $isPppoe ? 'bg-info text-dark' : 'bg-primary' }} mt-1">
+                                    {{ $tipeKoneksi }}
+                                </span>
+                                @if($namaPaket)
+                                    <br><small class="text-muted">{{ $namaPaket }}</small>
+                                @endif
+                            </td>
+                            <td>
+                                @if(is_null($log->waktu_selesai))
+                                    <span class="badge bg-warning text-dark"><i class="spinner-border spinner-border-sm me-1" role="status" style="width: 10px; height: 10px; border-width: 2px;"></i> [Wait]</span>
+                                @else
+                                    {{ $log->durasi_formatted }}
+                                @endif
+                                <br>
+                                <small class="text-muted">{{ number_format($log->data_usage_mb, 2) }} MB</small>
+                            </td>
                             <td>
                                 @if($log->is_anomali)
-                                    <span class="badge bg-danger">Anomali</span>
+                                    <span class="text-danger fw-bold"><i class="bi bi-x-circle-fill me-1"></i> Gagal</span>
                                 @else
-                                    <span class="badge bg-success">Normal</span>
+                                    <span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i> Sukses</span>
                                 @endif
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-dark btn-log-detail" 
+                                        data-id="{{ $log->id_log }}"
+                                        data-nama="{{ optional($log->pelanggan)->nama_pelanggan ?? '-' }}"
+                                        data-username="{{ optional($log->pelanggan)->username_mikrotik ?? '-' }}"
+                                        data-ip="{{ $liveIp !== 'Offline' ? $liveIp : ($log->ip_address ?? '-') }}"
+                                        data-tipe="{{ $isPppoe ? 'PPPoE' : 'Hotspot' }}"
+                                        data-paket="{{ $namaPaket ?: '-' }}"
+                                        data-mulai="{{ $log->waktu_mulai->format('d M Y, H:i:s') }}"
+                                        data-selesai="{{ $log->waktu_selesai ? $log->waktu_selesai->format('d M Y, H:i:s') : 'Masih Aktif (Running)' }}"
+                                        data-durasi="{{ $log->durasi_formatted }}"
+                                        data-usage="{{ number_format($log->data_usage_mb, 2) }} MB"
+                                        data-status="{{ $log->is_anomali ? 'Anomali' : 'Normal' }}"
+                                        title="Detail Log">
+                                    <i class="bi bi-file-earmark-text"></i>
+                                </button>
                             </td>
                         </tr>
                         @empty
-                        <tr><td colspan="6" class="text-center py-3 text-muted">Belum ada aktivitas pemakaian pelanggan.</td></tr>
+                        <tr><td colspan="7" class="text-center py-3 text-muted">Belum ada aktivitas pemakaian pelanggan.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -252,6 +309,45 @@
         if (searchForm) {
             searchForm.addEventListener('submit', function(e) {
                 e.preventDefault();
+            });
+        }
+
+        // Event listener detail button
+        if (logTableContainer) {
+            logTableContainer.addEventListener('click', function(e) {
+                const btn = e.target.closest('.btn-log-detail');
+                if (!btn) return;
+                
+                const d = btn.dataset;
+                const statusHtml = d.status === 'Anomali' 
+                    ? '<span class="badge bg-danger">Anomali</span>' 
+                    : '<span class="badge bg-success">Normal</span>';
+
+                Swal.fire({
+                    title: '<strong>Detail Aktivitas Jaringan</strong>',
+                    icon: 'info',
+                    html: `
+                        <div class="text-start">
+                            <table class="table table-sm table-bordered mt-2" style="font-size: 0.95rem;">
+                                <tbody>
+                                    <tr><th style="width: 35%; background-color: #f1f5f9;">ID Sesi Log</th><td>#${d.id}</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Nama Pelanggan</th><td><strong>${d.nama}</strong> (${d.username})</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">IP Address</th><td><span class="badge bg-dark">${d.ip}</span></td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Tipe Akses</th><td><span class="badge ${d.tipe === 'PPPoE' ? 'bg-info text-dark' : 'bg-primary'}">${d.tipe}</span></td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Paket Bandwidth</th><td>${d.paket}</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Waktu Mulai</th><td>${d.mulai}</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Waktu Selesai</th><td>${d.selesai}</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Durasi Koneksi</th><td>${d.durasi}</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Volume Data</th><td>${d.usage}</td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">Status</th><td>${statusHtml}</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    `,
+                    showCloseButton: true,
+                    confirmButtonColor: '#17395f',
+                    confirmButtonText: 'Tutup'
+                });
             });
         }
     });

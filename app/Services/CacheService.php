@@ -224,7 +224,7 @@ class CacheService
     {
         return $this->remember(
             self::PREFIX_MIKROTIK . ':realtime',
-            60, // 1 minute only for realtime data
+            3, // 3 seconds for realtime data
             $callback
         );
     }

@@ -62,7 +62,12 @@
                         @forelse($pelanggan as $item)
                             <tr>
                                 <td>{{ $item->id_pelanggan }}</td>
-                                <td>{{ $item->nama_pelanggan }}</td>
+                                <td>
+                                    {{ $item->nama_pelanggan }}
+                                    @if($item->alamat)
+                                        <br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ $item->alamat }}</small>
+                                    @endif
+                                </td>
                                 <td>
                                     <span class="badge {{ \Illuminate\Support\Str::contains(strtolower($item->paket->nama_paket ?? ''), 'pppoe') ? 'bg-info' : 'bg-primary' }}">
                                         {{ \Illuminate\Support\Str::contains(strtolower($item->paket->nama_paket ?? ''), 'pppoe') ? 'PPPoE' : 'Hotspot' }}
@@ -192,7 +197,7 @@
                     e.preventDefault();
                     Swal.fire({
                         title: '⚠️ PERINGATAN BUKAN MAIN!',
-                        html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MENGHAPUS</strong> pelanggan ini secara <strong>PERMANEN</strong>?<br><br>Akun siswa di <strong>MikroTik</strong> juga akan ikut <strong>MUSNAH</strong>.<br><br><span class="text-danger fw-bold">Tindakan ini TIDAK bisa dibatalkan!</span>',
+                        html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MENGHAPUS</strong> pelanggan ini secara <strong>PERMANEN</strong>?<br><br>Akun pelanggan di <strong>MikroTik</strong> juga akan ikut <strong>MUSNAH</strong>.<br><br><span class="text-danger fw-bold">Tindakan ini TIDAK bisa dibatalkan!</span>',
                         icon: 'warning',
                         iconColor: '#dc3545',
                         showCancelButton: true,
@@ -230,7 +235,7 @@
                     e.preventDefault();
                     Swal.fire({
                         title: 'Putus Sesi Pelanggan',
-                        html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MEMUTUS PAKSA (Kick)</strong> koneksi siswa ini?<br><br>Siswa akan <strong>ter-disconnect</strong> dari internet <strong>sesaat</strong>.',
+                        html: 'Apakah Anda <strong>YAKIN</strong> ingin <strong>MEMUTUS PAKSA (Kick)</strong> koneksi pelanggan ini?<br><br>Pelanggan akan <strong>ter-disconnect</strong> dari internet <strong>sesaat</strong>.',
                         icon: 'warning',
                         iconColor: '#0d6efd',
                         showCancelButton: true,

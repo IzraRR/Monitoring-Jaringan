@@ -13,7 +13,11 @@ class AuthController extends Controller
     public function showLoginForm(Request $request): View|RedirectResponse
     {
         if ($request->session()->get('status_login') === true) {
-            return redirect()->route('dashboard');
+            $role = $request->session()->get('admin_role');
+            if ($role === 'Admin') {
+                return redirect()->route('dashboard');
+            }
+            return redirect()->route('laporan.index');
         }
 
         return view('login');
@@ -32,19 +36,15 @@ class AuthController extends Controller
                 return back()->withInput()->with('error', 'Username atau password salah.');
             }
 
-            $storedPassword = (string) $admin->password;
-            $isValidPassword = Hash::check($credentials['password'], $storedPassword);
-
-            // Migrasi sekali: password lama yang belum di-hash (hanya jika bukan format bcrypt).
-            if (!$isValidPassword && !$this->isBcryptHash($storedPassword)) {
-                $isValidPassword = hash_equals($storedPassword, $credentials['password']);
-            }
+            $isValidPassword = Hash::check($credentials['password'], $admin->password)
+                || hash_equals((string) $admin->password, $credentials['password']);
 
             if (!$isValidPassword) {
                 return back()->withInput()->with('error', 'Username atau password salah.');
             }
 
-            if (!$this->isBcryptHash($storedPassword)) {
+            // Migrasikan password plaintext lama ke hash jika masih belum terenkripsi.
+            if (!Hash::check($credentials['password'], $admin->password)) {
                 $admin->update([
                     'password' => Hash::make($credentials['password']),
                 ]);
@@ -76,11 +76,6 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('login.form')->with('success', 'Anda berhasil logout.');
-    }
-
-    private function isBcryptHash(string $password): bool
-    {
-        return preg_match('/^\$2[ayb]\$.{56}$/', $password) === 1;
+        return redirect()->route('login.form')->with('success', 'Anda telah berhasil keluar.');
     }
 }

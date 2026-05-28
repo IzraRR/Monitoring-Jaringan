@@ -26,9 +26,12 @@ class LogAktivitasController extends Controller
 
         $logAktivitas = LogAktivitas::with(['pelanggan', 'paket'])
             ->when($search !== '', function ($query) use ($search) {
-                $query->whereHas('pelanggan', function ($q) use ($search) {
-                    $q->where('nama_pelanggan', 'like', "%{$search}%")
-                      ->orWhere('username_mikrotik', 'like', "%{$search}%");
+                $query->where(function($q1) use ($search) {
+                    $q1->where('ip_address', 'like', "%{$search}%")
+                       ->orWhereHas('pelanggan', function ($q) use ($search) {
+                           $q->where('nama_pelanggan', 'like', "%{$search}%")
+                             ->orWhere('username_mikrotik', 'like', "%{$search}%");
+                       });
                 });
             })
             ->when($start, function ($query) use ($start) { $query->where('waktu_mulai', '>=', $start); })

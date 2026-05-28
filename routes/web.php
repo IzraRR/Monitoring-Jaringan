@@ -20,18 +20,51 @@ use App\Http\Controllers\PasswordController;
 |
 */
 
+Route::get('/deploy-migrate', function() {
+    if (request('key') !== 'monitoring123') {
+        abort(403, 'Unauthorized access.');
+    }
+    
+    try {
+        // Run migrations
+        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+        $migrationOutput = \Illuminate\Support\Facades\Artisan::output();
+        
+        // Run seeders
+        \Illuminate\Support\Facades\Artisan::call('db:seed', ['--force' => true]);
+        $seedOutput = \Illuminate\Support\Facades\Artisan::output();
+        
+        // Fix role for kepsek to Kepsek (for requirements)
+        \DB::table('admin')->where('username', 'kepsek')->update(['peran' => 'Kepsek']);
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Migration, seeding, and role assignment completed!',
+            'migration' => explode("\n", trim($migrationOutput)),
+            'seeding' => explode("\n", trim($seedOutput))
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+            'trace' => explode("\n", trim($e->getTraceAsString()))
+        ], 500);
+    }
+});
+
 Route::get('/', function () {
     if (session('status_login') === true) {
-        return redirect()->route('dashboard');
+        $role = session('admin_role');
+        if ($role === 'Admin') {
+            return redirect()->route('dashboard');
+        }
+        return redirect()->route('laporan.index');
     }
-
     return redirect()->route('login.form');
 });
 
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login.form');
-Route::post('/login', [AuthController::class, 'login'])
-    ->middleware('throttle:5,1')
-    ->name('login.attempt');
+Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
 
 Route::middleware(['admin.auth', 'admin.role'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

@@ -25,7 +25,9 @@ return new class extends Migration
                 ->after('id_pelanggan')
                 ->constrained('paket_bandwidth', 'id_paket')
                 ->onDelete('restrict'); // Restrict agar paket tidak bisa dihapus jika ada log
-            
+        });
+
+        Schema::table('log_aktivitas', function (Blueprint $table) {
             // Tambahkan kolom ip_address (sudah ada di model tapi belum di database)
             $table->string('ip_address', 45)->nullable()->after('id_paket');
         });
