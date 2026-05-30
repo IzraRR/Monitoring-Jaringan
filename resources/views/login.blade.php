@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login | Admin Jaringan SMKN 53</title>
+    <link rel="icon" type="image/png" href="{{ asset('logo.png') }}">
     <link href="{{ asset('vendor/css/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('vendor/css/bootstrap-icons.css') }}">
     <style>
