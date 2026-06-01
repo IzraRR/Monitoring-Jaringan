@@ -143,6 +143,7 @@
                                         data-nama="{{ optional($log->pelanggan)->nama_pelanggan ?? '-' }}"
                                         data-username="{{ optional($log->pelanggan)->username_mikrotik ?? '-' }}"
                                         data-ip="{{ $liveIp !== 'Offline' ? $liveIp : ($log->ip_address ?? '-') }}"
+                                        data-is-active="{{ $isCurrentlyActiveSession ? 'true' : 'false' }}"
                                         data-tipe="{{ $isPppoe ? 'PPPoE' : 'Hotspot' }}"
                                         data-paket="{{ $namaPaket ?: '-' }}"
                                         data-mulai="{{ $log->waktu_mulai->format('d M Y, H:i:s') }}"
@@ -361,6 +362,16 @@
                     ? '<span class="badge bg-danger">Anomali</span>' 
                     : '<span class="badge bg-success">Normal</span>';
 
+                const isActive = d.isActive === 'true';
+                let ipHtml = '';
+                if (isActive) {
+                    ipHtml = `<span class="badge bg-info text-dark">${d.ip}</span>`;
+                } else if (d.ip && d.ip !== '-' && d.ip !== 'Offline') {
+                    ipHtml = `<span class="text-secondary">${d.ip}</span>`;
+                } else {
+                    ipHtml = `<span class="text-muted small">Offline</span>`;
+                }
+
                 Swal.fire({
                     title: '<strong>Detail Aktivitas Jaringan</strong>',
                     icon: 'info',
@@ -370,7 +381,7 @@
                                 <tbody>
                                     <tr><th style="width: 35%; background-color: #f1f5f9;">ID Sesi Log</th><td>#${d.id}</td></tr>
                                     <tr><th style="background-color: #f1f5f9;">Nama Pelanggan</th><td><strong>${d.nama}</strong> (${d.username})</td></tr>
-                                    <tr><th style="background-color: #f1f5f9;">IP Address</th><td><span class="badge bg-dark">${d.ip}</span></td></tr>
+                                    <tr><th style="background-color: #f1f5f9;">IP Address</th><td>${ipHtml}</td></tr>
                                     <tr><th style="background-color: #f1f5f9;">Tipe Akses</th><td><span class="badge ${d.tipe === 'PPPoE' ? 'bg-info text-dark' : 'bg-primary'}">${d.tipe}</span></td></tr>
                                     <tr><th style="background-color: #f1f5f9;">Paket Bandwidth</th><td>${d.paket}</td></tr>
                                     <tr><th style="background-color: #f1f5f9;">Waktu Mulai</th><td>${d.mulai}</td></tr>
