@@ -98,7 +98,7 @@
                                     $statusAkses = 'Logout';
                                     $statusColor = 'bg-secondary';
 
-                                    if (is_null($log->waktu_selesai)) {
+                                    if (is_null($log->waktu_selesai) && $liveIp !== 'Offline') {
                                         $statusAkses = 'Login';
                                         $statusColor = 'bg-success';
                                     }
@@ -121,7 +121,7 @@
                                 @endif
                             </td>
                             <td>
-                                @if(is_null($log->waktu_selesai))
+                                @if(is_null($log->waktu_selesai) && $liveIp !== 'Offline')
                                     <span class="badge bg-warning text-dark"><i class="spinner-border spinner-border-sm me-1" role="status" style="width: 10px; height: 10px; border-width: 2px;"></i> [Wait]</span>
                                 @else
                                     {{ $log->durasi_formatted }}
@@ -145,7 +145,7 @@
                                         data-tipe="{{ $isPppoe ? 'PPPoE' : 'Hotspot' }}"
                                         data-paket="{{ $namaPaket ?: '-' }}"
                                         data-mulai="{{ $log->waktu_mulai->format('d M Y, H:i:s') }}"
-                                        data-selesai="{{ $log->waktu_selesai ? $log->waktu_selesai->format('d M Y, H:i:s') : 'Masih Aktif (Running)' }}"
+                                        data-selesai="{{ $log->waktu_selesai ? $log->waktu_selesai->format('d M Y, H:i:s') : ($liveIp === 'Offline' ? 'Sesi Terputus (Menunggu Sync)' : 'Masih Aktif (Running)') }}"
                                         data-durasi="{{ $log->durasi_formatted }}"
                                         data-usage="{{ number_format($log->data_usage_mb, 2) }} MB"
                                         data-status="{{ $log->is_anomali ? 'Anomali' : 'Normal' }}"
