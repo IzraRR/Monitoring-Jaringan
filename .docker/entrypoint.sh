@@ -1,5 +1,9 @@
 #!/usr/bin/env sh
 
+# Dump environment variables to .env file for Laravel (needed for cron/scheduler)
+printenv | grep -v -e '^PATH=' -e '^HOME=' -e '^USER=' -e '^SHELL=' | grep -E '^[a-zA-Z0-9_]+=' > /var/www/html/.env
+chown www-data:www-data /var/www/html/.env
+
 # Run user scripts, if they exist
 for f in /var/www/html/.fly/scripts/*.sh; do
     # Bail out this loop if any script exits with non-zero status code
