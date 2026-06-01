@@ -21,7 +21,8 @@ use App\Http\Controllers\PasswordController;
 */
 
 Route::get('/deploy-migrate', function() {
-    if (request('key') !== env('DEPLOY_KEY', 'monitoring123')) {
+    $deployKey = env('DEPLOY_KEY');
+    if (empty($deployKey) || request('key') !== $deployKey) {
         abort(403, 'Unauthorized access.');
     }
     
@@ -57,7 +58,8 @@ Route::get('/deploy-migrate', function() {
 });
 
 Route::get('/clear-cache', function() {
-    if (request('key') !== env('DEPLOY_KEY', 'monitoring123')) {
+    $deployKey = env('DEPLOY_KEY');
+    if (empty($deployKey) || request('key') !== $deployKey) {
         abort(403, 'Unauthorized access.');
     }
     
@@ -81,7 +83,8 @@ Route::get('/clear-cache', function() {
 });
 
 Route::get('/sync-logs', function() {
-    if (request('key') !== env('DEPLOY_KEY', 'monitoring123')) {
+    $deployKey = env('DEPLOY_KEY');
+    if (empty($deployKey) || request('key') !== $deployKey) {
         abort(403, 'Unauthorized access.');
     }
     
