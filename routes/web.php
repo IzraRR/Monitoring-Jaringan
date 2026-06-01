@@ -80,6 +80,28 @@ Route::get('/clear-cache', function() {
     }
 });
 
+Route::get('/sync-logs', function() {
+    if (request('key') !== env('DEPLOY_KEY', 'monitoring123')) {
+        abort(403, 'Unauthorized access.');
+    }
+    
+    try {
+        \Illuminate\Support\Facades\Artisan::call('app:sync-log-aktivitas');
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Log synchronization triggered!',
+            'output' => explode("\n", trim($output))
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
+
 Route::get('/', function () {
     if (session('status_login') === true) {
         $role = session('admin_role');
