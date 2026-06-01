@@ -80,10 +80,12 @@
                                     $uname = optional($log->pelanggan)->username_mikrotik;
                                     $liveIp = $uname && isset($activeIps[$uname]) ? $activeIps[$uname] : 'Offline';
                                 @endphp
-                                @if($liveIp === 'Offline')
-                                    <span class="text-muted small">Offline</span>
-                                @else
+                                @if($liveIp !== 'Offline')
                                     <span class="badge bg-info text-dark">{{ $liveIp }}</span>
+                                @elseif($log->ip_address)
+                                    <span class="text-secondary">{{ $log->ip_address }}</span>
+                                @else
+                                    <span class="text-muted small">Offline</span>
                                 @endif
                             </td>
                             <td>
