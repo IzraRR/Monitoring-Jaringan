@@ -79,8 +79,9 @@
                                 @php
                                     $uname = optional($log->pelanggan)->username_mikrotik;
                                     $liveIp = $uname && isset($activeIps[$uname]) ? $activeIps[$uname] : 'Offline';
+                                    $isCurrentlyActiveSession = is_null($log->waktu_selesai) && $liveIp !== 'Offline';
                                 @endphp
-                                @if($liveIp !== 'Offline')
+                                @if($isCurrentlyActiveSession)
                                     <span class="badge bg-info text-dark">{{ $liveIp }}</span>
                                 @elseif($log->ip_address)
                                     <span class="text-secondary">{{ $log->ip_address }}</span>
