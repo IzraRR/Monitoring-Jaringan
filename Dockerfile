@@ -61,7 +61,8 @@ RUN composer install --optimize-autoloader --no-dev \
     && mkdir -p storage/logs \
     && php artisan optimize:clear \
     && chown -R www-data:www-data /var/www/html \
-    && echo "MAILTO=\"\"\n* * * * * www-data /usr/bin/php /var/www/html/artisan schedule:run" > /etc/cron.d/laravel;\
+    && printf "MAILTO=\"\"\n* * * * * www-data /usr/bin/php /var/www/html/artisan schedule:run\n" > /etc/cron.d/laravel \
+    && chmod 0644 /etc/cron.d/laravel;\
     if [ -d .docker ]; then cp .docker/entrypoint.sh /entrypoint; chmod +x /entrypoint; fi;
 
 

@@ -14,8 +14,8 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('app:kirim-tagihan-wa')->dailyAt('08:00')->withoutOverlapping();
         $schedule->command('app:nonaktifkan-pelanggan')->dailyAt('00:05')->withoutOverlapping();
-        $schedule->command('app:sync-mikrotik-sessions')->everyFiveMinutes()->withoutOverlapping();
-        $schedule->command('app:sync-log-aktivitas')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command('app:sync-mikrotik-sessions')->everyFiveMinutes()->withoutOverlapping(10);
+        $schedule->command('app:sync-log-aktivitas')->everyFiveMinutes()->withoutOverlapping(10);
     }
 
     /**
